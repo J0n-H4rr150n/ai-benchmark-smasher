@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from .database import init_db
 from .routers import sessions, chat
+from .routes import knowledge
 from .tools.registry import tool_registry
 from . import schemas
 
@@ -41,6 +42,7 @@ app.add_middleware(
 # Include routers
 app.include_router(sessions.router)
 app.include_router(chat.router)
+app.include_router(knowledge.router)
 
 
 @app.get("/health", response_model=schemas.HealthResponse)

@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as SQLEnum, JSON
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum as SQLEnum, JSON, ARRAY
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from datetime import datetime
 import enum
 from pgvector.sqlalchemy import Vector
@@ -34,6 +35,7 @@ class CTFSession(Base):
     conversations = relationship("Conversation", back_populates="session", cascade="all, delete-orphan")
     findings = relationship("Finding", back_populates="session", cascade="all, delete-orphan")
     flags = relationship("Flag", back_populates="session", cascade="all, delete-orphan")
+    successful_runs = relationship("SuccessfulRun", back_populates="session", cascade="all, delete-orphan")
 
 
 class Conversation(Base):
@@ -92,12 +94,44 @@ class Flag(Base):
     session = relationship("CTFSession", back_populates="flags")
 
 
+class SuccessfulRun(Base):
+    """Knowledge base of successful CTF runs for RAG"""
+    __tablename__ = "successful_runs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=False)
+    
+    # Metadata
+    goal = Column(Text, nullable=False)
+    vulnerability_type = Column(String)  # "IDOR", "SQLi", "XSS", etc.
+    target_url = Column(String)
+    total_turns = Column(Integer)
+    
+    # Success information (for embedding and search)
+    methodology = Column(Text, nullable=False)  # Step-by-step how it was solved
+    key_findings = Column(Text)  # Important discoveries
+    breakthrough_insight = Column(Text)  # The "aha!" moment
+    tools_used = Column(ARRAY(String))  # e.g., ["browser", "web_fuzzer"]
+    target_characteristics = Column(Text)  # Tech stack, auth type, etc.
+    
+    # Vector embedding (768-dim from Universal Sentence Encoder)
+    methodology_embedding = Column(Vector(768))
+    
+    # References
+    summary_file_path = Column(String)  # Path to full markdown summary
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    # Relationships
+    session = relationship("CTFSession", back_populates="successful_runs")
+
+
 class Embedding(Base):
     """Vector embeddings for semantic search"""
     __tablename__ = "embeddings"
 
     id = Column(Integer, primary_key=True, index=True)
     content = Column(Text, nullable=False)
-    embedding = Column(Vector(768), nullable=False)  # Gemini text-embedding-004 is 768 dims
+    embedding = Column(Vector(768), nullable=False)  # Universal Sentence Encoder is 768 dims
     meta_data = Column(JSON, nullable=True)  # Renamed from metadata to avoid SQLAlchemy conflict
     created_at = Column(DateTime, default=datetime.utcnow)

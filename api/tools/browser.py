@@ -1,6 +1,7 @@
 import os
 import json
 import time
+from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page, Response
 from pathlib import Path
@@ -332,7 +333,8 @@ class BrowserTool(BaseTool):
                 
                 # 1. VISUAL (Set of Marks)
                 elements_metadata = await self._inject_marks()
-                screenshot_path = self.state_dir / "screenshot.png"
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                screenshot_path = self.state_dir / f"screenshot_{timestamp}.png"
                 await self.page.screenshot(path=str(screenshot_path))
                 
                 # 2. CODE (Dynamic DOM + Raw Source)
@@ -397,7 +399,8 @@ class BrowserTool(BaseTool):
                 })
                 
             elif action == "screenshot":
-                screenshot_path = self.state_dir / "screenshot.png"
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                screenshot_path = self.state_dir / f"screenshot_{timestamp}.png"
                 await self.page.screenshot(path=str(screenshot_path))
                 result["success"] = True
                 result["screenshot_path"] = str(screenshot_path)

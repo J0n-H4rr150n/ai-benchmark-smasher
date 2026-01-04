@@ -4,6 +4,8 @@ from .base import BaseTool, ToolDefinition
 from .browser import BrowserTool
 from .web_fuzzer import WebFuzzerTool
 from .get_fuzzer_result import GetFuzzerResultTool
+from .view_screenshot import ViewScreenshotTool
+from .search_knowledge import SearchKnowledgeTool
 
 
 class ToolRegistry:
@@ -19,6 +21,8 @@ class ToolRegistry:
         self.register(BrowserTool(self.state_dir))
         self.register(WebFuzzerTool(self.state_dir))
         self.register(GetFuzzerResultTool(self.state_dir))
+        self.register(ViewScreenshotTool(self.state_dir))
+        self.register(SearchKnowledgeTool())
     
     def register(self, tool: BaseTool):
         """Register a new tool"""

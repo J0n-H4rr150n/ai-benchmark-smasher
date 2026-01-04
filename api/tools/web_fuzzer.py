@@ -5,7 +5,7 @@ import time
 import json
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, Tuple
 from .base import BaseTool, ToolParameter
 
 class WebFuzzerTool(BaseTool):
@@ -15,6 +15,34 @@ class WebFuzzerTool(BaseTool):
         self.state_dir = state_dir
         self.results_dir = state_dir / "fuzzer_results"
         self.results_dir.mkdir(exist_ok=True)
+
+    def _load_browser_state(self) -> Tuple[Dict[str, str], Dict[str, str]]:
+        """Load cookies and headers from browser state"""
+        state_file = self.state_dir / "browser_state.json"
+        if not state_file.exists():
+            return {}, {}
+
+        try:
+            with open(state_file, 'r') as f:
+                state = json.load(f)
+            
+            cookies = {c['name']: c['value'] for c in state.get('cookies', [])}
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            }
+            
+            # Heuristic for JWT in localStorage
+            for origin in state.get('origins', []):
+                for item in origin.get('localStorage', []):
+                    k, v = item['name'], item['value']
+                    if "token" in k.lower() or "auth" in k.lower():
+                        # Basic JWT check (starts with eyJ)
+                        if isinstance(v, str) and v.startswith("eyJ"):
+                            headers["Authorization"] = f"Bearer {v}"
+                            
+            return cookies, headers
+        except Exception:
+            return {}, {}
     
     @property
     def name(self) -> str:
@@ -124,6 +152,11 @@ class WebFuzzerTool(BaseTool):
         baseline_stats = {} # (status, length) -> count
 
         async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
+            # Load auth state from browser
+            cookies, headers = self._load_browser_state()
+            client.cookies.update(cookies)
+            client.headers.update(headers)
+
             for idx, val in enumerate(fuzz_values, start=1):
                 url = url_template.replace("{{VAL}}", val)
                 # Handle localhost translation for Docker container
