@@ -65,30 +65,41 @@ def run_interaction_loop(session_id, last_message, run_data, log_file, max_turns
         if data.get('content'):
             console.print(Panel(Text(data['content'], style="white"), title="[gemini]Gemini[/gemini]", border_style="purple"))
 
-        # Insights Panel
-        insights = []
+        # Comprehensive LLM Reasoning Panel
+        reasoning = []
+        if data.get('llm_analysis') and data['llm_analysis'] != "None":
+            reasoning.append(f"[bold cyan]Analysis:[/bold cyan]\n{data['llm_analysis']}")
         if data.get('llm_findings') and data['llm_findings'] != "None":
-            insights.append(f"[finding]Findings:[/finding] {data['llm_findings']}")
+            reasoning.append(f"[finding]Findings:[/finding]\n{data['llm_findings']}")
         if data.get('llm_decision'):
-            insights.append(f"[decision]Decision:[/decision] {data['llm_decision']}")
+            reasoning.append(f"[decision]Decision:[/decision]\n{data['llm_decision']}")
+        if data.get('llm_critique') and data['llm_critique'] != "None":
+            reasoning.append(f"[bold red]Critique:[/bold red]\n{data['llm_critique']}")
+        if data.get('llm_confidence_score'):
+            reasoning.append(f"[dim]Confidence: {data['llm_confidence_score']}/10[/dim]")
+        if data.get('llm_grading_score'):
+            reasoning.append(f"[dim]Progress Score: {data['llm_grading_score']}/10[/dim]")
+        if data.get('llm_next_steps') and data['llm_next_steps'] != "None":
+            reasoning.append(f"[bold yellow]Next Steps:[/bold yellow]\n{data['llm_next_steps']}")
+        if data.get('llm_need_block') and data['llm_need_block'] != "None":
+            reasoning.append(f"[warning]Need from User:[/warning]\n{data['llm_need_block']}")
         
-        if insights:
-            console.print(Panel("\n".join(insights), title="[bold white]Analysis[/bold white]", border_style="dim white"))
+        if reasoning:
+            console.print(Panel("\n\n".join(reasoning), title="[bold white]🧠 LLM Reasoning[/bold white]", border_style="cyan"))
 
-        # Get tool results for display
-        assistant_msg = fw.get_recent_history(session_id)
-        
+        # Tool Calls with Parameters
         if data.get('tool_calls'):
-            tool_names = ", ".join([f"[tool]{tc['tool']}[/tool]" for tc in data['tool_calls']])
-            console.print(f"🛠️  [bold]Tool Calls:[/bold] {tool_names}")
+            for tc in data['tool_calls']:
+                tool_name = tc['tool']
+                params = tc.get('args', {})
+                # Format parameters cleanly
+                param_str = "\n".join([f"  • {k}: {v}" for k, v in params.items()])
+                console.print(Panel(
+                    f"[bold]{tool_name}[/bold]\n{param_str}",
+                    title="[tool]🛠️  Tool Call[/tool]",
+                    border_style="blue"
+                ))
             last_message = "Continue"
-            
-            if assistant_msg and assistant_msg.get('tool_results'):
-                for res in assistant_msg['tool_results']:
-                    if 'network' in res:
-                        # Print network summary neatly
-                        net_info = res['network'].strip()
-                        console.print(Panel(net_info, title="[dim]Network Traffic[/dim]", border_style="dim blue", padding=(0,1)))
         else:
             console.print("\n[dim italic]AI finished its thought, standing by...[/dim italic]")
         
@@ -106,6 +117,15 @@ def run_interaction_loop(session_id, last_message, run_data, log_file, max_turns
         # Intermediate save
         with open(log_file, 'w') as f:
             json.dump(run_data, f, indent=2)
+
+        # Check for goal completion
+        if data.get('content') and 'GOAL-COMPLETE' in data['content']:
+            console.print("\n[bold green]🎯 PRIMARY GOAL ACHIEVED! Auto-saving mission...[/bold green]")
+            with console.status("[bold cyan]Generating summary...", spinner="dots"):
+                summary_file, _ = fw.generate_markdown_summary(run_data, log_file)
+            if summary_file:
+                console.print(f"[success]✓ Summary saved:[/success] [link=file://{summary_file}]{os.path.basename(summary_file)}[/link]")
+            console.print("[dim]You can continue exploring or type 'exit'/'new' to finish.[/dim]\n")
 
         if not data.get('tool_calls'):
             IS_AI_RUNNING = False
@@ -191,7 +211,6 @@ def main():
 
     # 2. MAIN INTERACTIVE LOOP
     console.print(Rule(style="dim"))
-    console.print("[info]Type 'exit' to quit, or hit Enter to start/continue autonomous run.[/info]")
     console.print("[dim]During a run, press Ctrl+C to PAUSE. At prompt, press Ctrl+C to EXIT.[/dim]\n")
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -209,10 +228,46 @@ def main():
     while True:
         try:
             IS_AI_RUNNING = False
-            user_input = console.input("\n[bold yellow]Mission Control[/bold yellow] > ").strip()
+            # Show options before each prompt
+            console.print("[dim]Commands: [bold]exit[/bold] | [bold]new[/bold] | [bold]Enter[/bold] to continue[/dim]")
+            user_input = console.input("[bold yellow]Mission Control[/bold yellow] > ").strip()
             
             if user_input.lower() == 'exit':
                 break
+            
+            if user_input.lower() == 'new':
+                # Save current session summary
+                console.print("\n[info]Saving current mission...[/info]")
+                with console.status("[bold cyan]Generating summary...", spinner="dots"):
+                    fw.generate_markdown_summary(current_run_data, log_file)
+                
+                # Prompt for new mission
+                console.print("\n[bold yellow]Starting New Mission[/bold yellow]")
+                target_url = console.input(f"[bold white]Target URL[/bold white]: ") or "http://localhost:47658/"
+                goal_input = console.input(f"[bold white]Mission Goal[/bold white]: ")
+                if goal_input: goal = goal_input
+                
+                console.print(f"\n[bold info]Creating New Mission Session...[/bold info]")
+                resp = requests.post(f"{fw.BASE_URL}/sessions", json={
+                    "target_url": target_url,
+                    "goal": goal
+                }, timeout=30)
+                resp.raise_for_status()
+                session_id = resp.json()["id"]
+                last_message = goal
+                
+                # Reset for new mission
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                log_file = f"log/runs/tester_{timestamp}.json"
+                current_run_data = {
+                    "timestamp": timestamp,
+                    "session_id": session_id,
+                    "target_url": target_url,
+                    "goal": goal,
+                    "turns": []
+                }
+                console.print(f"[success]✓ New Session {session_id} Started[/success]\n")
+                continue
                 
             if user_input:
                 last_message = user_input
