@@ -92,6 +92,7 @@ class ChatResponse(BaseModel):
     role: MessageRole
     content: str
     tool_calls: Optional[List[Dict[str, Any]]] = None
+    tool_results: Optional[List[Dict[str, Any]]] = None
     findings: Optional[List[FindingResponse]] = None
     flags: Optional[List[FlagResponse]] = None
 

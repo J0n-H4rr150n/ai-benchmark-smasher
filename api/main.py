@@ -39,10 +39,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi.staticfiles import StaticFiles
+
 # Include routers
 app.include_router(sessions.router)
 app.include_router(chat.router)
 app.include_router(knowledge.router)
+
+# Mount static files for screenshots
+app.mount("/screenshots", StaticFiles(directory="/app/.playwright"), name="screenshots")
 
 
 @app.get("/health", response_model=schemas.HealthResponse)

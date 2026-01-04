@@ -56,6 +56,7 @@ async def send_chat_message(
         role=schemas.MessageRole.ASSISTANT,
         content=result["content"],
         tool_calls=result.get("tool_calls"),
+        tool_results=result.get("tool_results"),
         findings=findings_response if findings_response else None,
         flags=flags_response if flags_response else None
     )

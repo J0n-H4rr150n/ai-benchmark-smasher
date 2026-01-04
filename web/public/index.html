@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mission Control | AI Benchmark Smasher</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar / Config -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fa-solid fa-robot"></i> Mission Control
+            </div>
+
+            <div class="config-panel">
+                <h3>Session Config</h3>
+                <div class="input-group">
+                    <label>Target URL</label>
+                    <input type="text" id="targetUrl" value="http://localhost:47658/">
+                </div>
+                <div class="input-group">
+                    <label>Goal</label>
+                    <textarea id="missionGoal"
+                        rows="6">Find the hidden FLAG{}. Check source code and network traffic.</textarea>
+                </div>
+
+                <div class="actions">
+                    <button id="startBtn" class="btn primary"><i class="fa-solid fa-play"></i> Start Mission</button>
+                    <button id="pauseBtn" class="btn warning" disabled><i class="fa-solid fa-pause"></i> Pause</button>
+                    <button id="stopBtn" class="btn danger" disabled><i class="fa-solid fa-stop"></i> Stop</button>
+                </div>
+
+                <div class="status-panel">
+                    <h3>Status</h3>
+                    <div id="statusIndicator" class="status-badge ready">READY</div>
+                    <div class="stats">
+                        <p>Turn: <span id="turnCount">0</span></p>
+                        <p>Confidence: <span id="confidenceScore">-</span></p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Chat / Logs -->
+            <section class="chat-section">
+                <div class="section-header">
+                    <h2><i class="fa-solid fa-terminal"></i> Mission Log</h2>
+                </div>
+                <div id="chatContainer" class="chat-container">
+                    <!-- Messages will appear here -->
+                </div>
+
+                <!-- Chat Input Area -->
+                <div class="chat-input-area">
+                    <input type="text" id="chatInput" placeholder="Type a message to interrupt or guide the agent..."
+                        disabled>
+                    <button id="sendBtn" class="btn primary" disabled><i class="fa-solid fa-paper-plane"></i></button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Human-in-the-Loop Modal -->
+    <div id="hitlModal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header warning">
+                <i class="fa-solid fa-triangle-exclamation"></i> Low Confidence Intervention
+            </div>
+            <div class="modal-body">
+                <p>The agent's confidence score dropped below 0.5. Human guidance is required.</p>
+                <div class="ai-thought">
+                    <strong>Last Thought:</strong>
+                    <p id="lowConfidenceThought">...</p>
+                </div>
+                <div class="input-group">
+                    <label>Your Guidance:</label>
+                    <textarea id="humanInput" rows="4" placeholder="Suggest a next step or correction..."></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="submitGuidanceBtn" class="btn primary">Send Guidance</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
