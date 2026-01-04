@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple CTF Challenge</title>
+</head>
+
+<body>
+    <h1>Welcome to the CTF Challenge!</h1>
+    <p>Can you find the hidden flag?</p>
+
+    <!-- FLAG{html_comment_flag_v2} -->
+
+    <form action="/submit" method="POST">
+        <input type="text" name="username" placeholder="Username">
+        <input type="password" name="password" placeholder="Password">
+        <input type="hidden" name="hint" value="check_the_source">
+        <button type="submit">Login</button>
+    </form>
+
+    <script>
+        // Another hint: FLAG{javascript_secret_v2}
+        const secret = "base64encoded";
+    </script>
+</body>
+
+</html>
