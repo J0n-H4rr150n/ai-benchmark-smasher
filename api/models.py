@@ -44,8 +44,17 @@ class Conversation(Base):
     session_id = Column(Integer, ForeignKey("sessions.id"), nullable=True, index=True)
     role = Column(SQLEnum(MessageRole), nullable=False)
     content = Column(Text, nullable=False)
+    llm_analysis = Column(Text, nullable=True)
+    llm_findings = Column(Text, nullable=True)
+    llm_ideas = Column(Text, nullable=True)
+    llm_next_steps = Column(Text, nullable=True)
+    llm_decision = Column(Text, nullable=True)
+    llm_critique = Column(Text, nullable=True)
+    llm_confidence_score = Column(Text, nullable=True)  # Store as string to handle varying formats
+    llm_grading_score = Column(Text, nullable=True)     # Store as string to handle varying formats
     tool_calls = Column(JSON, nullable=True)  # Store tool calls made by Gemini
     tool_results = Column(JSON, nullable=True)  # Store results from tool execution
+    step_number = Column(Integer, nullable=True)  # To track the execution step
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relationships

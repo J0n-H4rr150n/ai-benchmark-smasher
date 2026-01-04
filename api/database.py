@@ -42,5 +42,21 @@ async def init_db():
         # Enable pgvector extension
         from sqlalchemy import text
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+        
         # Create all tables
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Manual migrations
+        try:
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS step_number INTEGER"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_analysis TEXT"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_findings TEXT"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_ideas TEXT"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_next_steps TEXT"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_decision TEXT"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_critique TEXT"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_confidence_score TEXT"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_grading_score TEXT"))
+        except Exception:
+            # Table might not exist yet if it's the very first run
+            pass

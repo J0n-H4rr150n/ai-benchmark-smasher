@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     # GCP / Vertex AI
     gcp_project_id: str
     google_application_credentials: str = "./vertex-executor-key.json"
-    gemini_model: str = "gemini-2.0-flash-exp"  # or gemini-2.5-pro
+    gemini_model: str = "gemini-2.5-flash"  # or gemini-2.5-pro
     gemini_location: str = "us-central1"
     
     # Playwright

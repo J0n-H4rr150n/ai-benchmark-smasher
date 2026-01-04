@@ -47,3 +47,6 @@ playwright_state/
 
 # Alembic
 alembic/versions/*.pyc
+
+# Misc
+log/

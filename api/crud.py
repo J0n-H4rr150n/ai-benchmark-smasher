@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from . import models, schemas
@@ -43,8 +43,17 @@ async def create_conversation(
     session_id: Optional[int],
     role: models.MessageRole,
     content: str,
-    tool_calls: Optional[dict] = None,
-    tool_results: Optional[dict] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = None,
+    tool_results: Optional[List[Dict[str, Any]]] = None,
+    step_number: Optional[int] = None,
+    llm_analysis: Optional[str] = None,
+    llm_findings: Optional[str] = None,
+    llm_ideas: Optional[str] = None,
+    llm_next_steps: Optional[str] = None,
+    llm_decision: Optional[str] = None,
+    llm_critique: Optional[str] = None,
+    llm_confidence_score: Optional[str] = None,
+    llm_grading_score: Optional[str] = None
 ) -> models.Conversation:
     """Create a conversation message"""
     conversation = models.Conversation(
@@ -52,7 +61,16 @@ async def create_conversation(
         role=role,
         content=content,
         tool_calls=tool_calls,
-        tool_results=tool_results
+        tool_results=tool_results,
+        step_number=step_number,
+        llm_analysis=llm_analysis,
+        llm_findings=llm_findings,
+        llm_ideas=llm_ideas,
+        llm_next_steps=llm_next_steps,
+        llm_decision=llm_decision,
+        llm_critique=llm_critique,
+        llm_confidence_score=llm_confidence_score,
+        llm_grading_score=llm_grading_score
     )
     db.add(conversation)
     await db.flush()

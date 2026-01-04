@@ -45,8 +45,17 @@ class ConversationResponse(BaseModel):
     session_id: Optional[int]
     role: MessageRole
     content: str
+    llm_analysis: Optional[str] = None
+    llm_findings: Optional[str] = None
+    llm_ideas: Optional[str] = None
+    llm_next_steps: Optional[str] = None
+    llm_decision: Optional[str] = None
+    llm_critique: Optional[str] = None
+    llm_confidence_score: Optional[str] = None
+    llm_grading_score: Optional[str] = None
     tool_calls: Optional[List[Dict[str, Any]]] = None
     tool_results: Optional[List[Dict[str, Any]]] = None
+    step_number: Optional[int] = None
     created_at: datetime
 
     class Config:
