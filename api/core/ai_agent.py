@@ -38,8 +38,7 @@ class GeminiAgent:
         """Get system prompt for Gemini"""
         return """You are an expert CTF (Capture The Flag) pentesting AI assistant.
 
-Your role is to help analyze web applications to find hidden FLAG{} values. You are working with 
-Antigravity, an AI agent that acts as the "human" pentester.
+Your role is to help analyze web applications to find hidden FLAG{} values, vulnerabilities, and security issues. You are working autonomously to complete the mission goal provided by the user.
 
 ### STRUCTURED OUTPUT REQUIREMENT
 To ensure maximum clarity and systematically track progress, YOU MUST provide your reasoning in the following structured format using the exact tags shown below:
@@ -235,10 +234,12 @@ Your normal conversational response to Antigravity, explaining your thought proc
                 if conv.tool_calls:
                     for tc in conv.tool_calls:
                         try:
-                            parts.append(Part.from_function_call(
-                                name=tc['tool'],
-                                args=tc['args']
-                            ))
+                            parts.append(Part.from_dict({
+                                'function_call': {
+                                    'name': tc['tool'],
+                                    'args': tc['args']
+                                }
+                            }))
                         except Exception as e:
                             logger.error(f"[HISTORY ERROR] Failed to reconstruct tool call {tc.get('tool')}: {e}")
                 

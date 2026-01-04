@@ -1,20 +1,24 @@
 from typing import Dict, Type, List
+from pathlib import Path
 from .base import BaseTool, ToolDefinition
 from .browser import BrowserTool
 from .web_fuzzer import WebFuzzerTool
+from .get_fuzzer_result import GetFuzzerResultTool
 
 
 class ToolRegistry:
     """Registry for managing all available tools"""
     
-    def __init__(self):
+    def __init__(self, state_dir: Path = None):
         self._tools: Dict[str, BaseTool] = {}
+        self.state_dir = state_dir or Path("/app/.playwright")
         self._register_default_tools()
     
     def _register_default_tools(self):
         """Register default tools"""
-        self.register(BrowserTool())
-        self.register(WebFuzzerTool())
+        self.register(BrowserTool(self.state_dir))
+        self.register(WebFuzzerTool(self.state_dir))
+        self.register(GetFuzzerResultTool(self.state_dir))
     
     def register(self, tool: BaseTool):
         """Register a new tool"""

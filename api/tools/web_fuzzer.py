@@ -2,11 +2,19 @@ import asyncio
 import httpx
 import re
 import time
+import json
+from pathlib import Path
+from datetime import datetime
 from typing import Dict, Any, List, Optional
 from .base import BaseTool, ToolParameter
 
 class WebFuzzerTool(BaseTool):
     """Safe, rate-limited endpoint fuzzer for IDOR and discovery"""
+    
+    def __init__(self, state_dir: Path):
+        self.state_dir = state_dir
+        self.results_dir = state_dir / "fuzzer_results"
+        self.results_dir.mkdir(exist_ok=True)
     
     @property
     def name(self) -> str:
@@ -112,10 +120,11 @@ class WebFuzzerTool(BaseTool):
             return {"error": "No values provided for fuzzing"}
 
         results = []
+        full_results = []  # Store complete data separately
         baseline_stats = {} # (status, length) -> count
 
         async with httpx.AsyncClient(verify=False, timeout=10.0) as client:
-            for val in fuzz_values:
+            for idx, val in enumerate(fuzz_values, start=1):
                 url = url_template.replace("{{VAL}}", val)
                 # Handle localhost translation for Docker container
                 if "localhost" in url:
@@ -123,24 +132,51 @@ class WebFuzzerTool(BaseTool):
                 
                 try:
                     resp = await client.request(method, url)
+                    
+                    # Extract useful headers (Burp Intruder style)
+                    content_type = resp.headers.get("content-type", "unknown")
+                    location = resp.headers.get("location", "")
+                    set_cookie = resp.headers.get("set-cookie", "")
+                    
+                    # Summary data for quick viewing
                     data = {
+                        "req_num": idx,
                         "value": val,
                         "status": resp.status_code,
-                        "length": len(resp.text),
+                        "resp_length": len(resp.text),
+                        "content_type": content_type,
+                        "location": location,
+                        "set_cookie": bool(set_cookie),
                         "interesting": False
                     }
                     
+                    # Full data for detailed inspection
+                    full_data = {
+                        **data,
+                        "url": url,
+                        "method": method,
+                        "request_headers": dict(resp.request.headers),
+                        "response_headers": dict(resp.headers),
+                        "response_body": resp.text,
+                    }
+                    
+                    # Check for success criteria match
                     if success_criteria and re.search(success_criteria, resp.text, re.IGNORECASE):
                         data["interesting"] = True
-                        data["snippet"] = resp.text
+                        full_data["interesting"] = True
+                        # Only include snippet in summary for interesting responses
+                        data["snippet"] = resp.text[:500] + ("..." if len(resp.text) > 500 else "")
                     
                     # Track baseline
-                    key = (data["status"], data["length"])
+                    key = (data["status"], data["resp_length"])
                     baseline_stats[key] = baseline_stats.get(key, 0) + 1
                     
                     results.append(data)
+                    full_results.append(full_data)
                 except Exception as e:
-                    results.append({"value": val, "error": str(e)})
+                    err_data = {"req_num": idx, "value": val, "error": str(e)}
+                    results.append(err_data)
+                    full_results.append(err_data)
 
                 await asyncio.sleep(rate_limit_ms / 1000.0)
 
@@ -150,15 +186,25 @@ class WebFuzzerTool(BaseTool):
         
         anomalies = []
         for r in results:
-            if "error" in r: continue
-            if (r["status"], r["length"]) != baseline_key or r.get("interesting"):
+            if "error" in r:
+                anomalies.append(r)  # Errors are always anomalies
+                continue
+            if (r.get("status"), r.get("resp_length")) != baseline_key or r.get("interesting"):
                 anomalies.append(r)
 
+        # Save full results to disk
+        results_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+        results_file = self.results_dir / f"fuzz_{results_id}.json"
+        with open(results_file, 'w') as f:
+            json.dump(full_results, f, indent=2)
+
         return {
+            "results_id": results_id,
             "mode": mode,
             "url_template": url_template,
             "total_requests": len(results),
             "baseline": {"status": baseline_key[0], "length": baseline_key[1], "count": baseline_stats.get(baseline_key, 0)},
+            "results_summary": results,  # Full table for analysis
             "anomalies": anomalies,
-            "summary": f"Performed {len(results)} requests. Found {len(anomalies)} anomalies relative to baseline ({baseline_key})."
+            "summary": f"Performed {len(results)} requests. Baseline: {baseline_key[0]} with {baseline_key[1]} bytes ({baseline_stats.get(baseline_key, 0)} occurrences). Found {len(anomalies)} anomalies. Use results_id '{results_id}' to retrieve full details."
         }

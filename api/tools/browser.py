@@ -278,6 +278,8 @@ class BrowserTool(BaseTool):
                     return result
                 
                 await self.page.goto(url, wait_until="networkidle", timeout=30000)
+                # Save session after navigation
+                await self._save_context()
                 # Auto-extract after navigation
                 return await self.execute(action="extract")
                 
@@ -321,6 +323,8 @@ class BrowserTool(BaseTool):
                     await self.page.locator(selector).press("Enter")
                 
                 await self.page.wait_for_load_state("networkidle", timeout=10000)
+                # Save session after form submit (e.g., after login)
+                await self._save_context()
                 return await self.execute(action="extract")
                 
             elif action == "extract":
