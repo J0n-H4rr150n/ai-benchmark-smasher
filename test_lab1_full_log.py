@@ -78,13 +78,14 @@ def run_logged_test():
                 print(f"\n[Gemini Reasoning]:\n{data['content']}")
             
             # Print Structured Output if available
-            if any(data.get(f'llm_{k}') for k in ['analysis', 'findings', 'ideas', 'next_steps', 'confidence_score', 'grading_score', 'decision', 'critique']):
+            if any(data.get(f'llm_{k}') for k in ['analysis', 'findings', 'ideas', 'next_steps', 'confidence_score', 'grading_score', 'decision', 'critique', 'need_block']):
                 print("\n[Structured Analysis]:")
                 if data.get('llm_analysis'): print(f"  - Analysis: {data['llm_analysis'][:200]}...")
                 if data.get('llm_findings'): print(f"  - Findings: {data['llm_findings']}")
                 if data.get('llm_ideas'): print(f"  - Ideas: {data['llm_ideas']}")
                 if data.get('llm_critique'): print(f"  - Critique: {data['llm_critique']}")
                 if data.get('llm_decision'): print(f"  - Decision: {data['llm_decision']}")
+                if data.get('llm_need_block'): print(f"  - Need Block: {data['llm_need_block']}")
                 if data.get('llm_next_steps'): print(f"  - Next Steps: {data['llm_next_steps']}")
                 if data.get('llm_confidence_score'): print(f"  - Confidence: {data['llm_confidence_score']}")
                 if data.get('llm_grading_score'): print(f"  - Grading: {data['llm_grading_score']}")

@@ -53,6 +53,7 @@ async def init_db():
             await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_findings TEXT"))
             await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_ideas TEXT"))
             await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_next_steps TEXT"))
+            await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_need_block TEXT"))
             await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_decision TEXT"))
             await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_critique TEXT"))
             await conn.execute(text("ALTER TABLE conversations ADD COLUMN IF NOT EXISTS llm_confidence_score TEXT"))

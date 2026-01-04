@@ -49,6 +49,7 @@ class ConversationResponse(BaseModel):
     llm_findings: Optional[str] = None
     llm_ideas: Optional[str] = None
     llm_next_steps: Optional[str] = None
+    llm_need_block: Optional[str] = None
     llm_decision: Optional[str] = None
     llm_critique: Optional[str] = None
     llm_confidence_score: Optional[str] = None

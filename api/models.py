@@ -48,6 +48,7 @@ class Conversation(Base):
     llm_findings = Column(Text, nullable=True)
     llm_ideas = Column(Text, nullable=True)
     llm_next_steps = Column(Text, nullable=True)
+    llm_need_block = Column(Text, nullable=True)
     llm_decision = Column(Text, nullable=True)
     llm_critique = Column(Text, nullable=True)
     llm_confidence_score = Column(Text, nullable=True)  # Store as string to handle varying formats

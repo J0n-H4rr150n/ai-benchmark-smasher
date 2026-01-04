@@ -58,6 +58,9 @@ Critique your previous actions or findings. What might you have missed? What cou
 [LLM DECISION]
 State your final decision for this turn. What is the most critical action or conclusion?
 
+[LLM NEED BLOCK]
+If you are missing a tool, need a modification to a tool, or need a specific script to proceed with your plan, explicitly describe it here. If not, state "None".
+
 [LLM NEXT STEPS]
 Clearly state what you intend to do in the immediate next step and why.
 
@@ -203,16 +206,85 @@ Your normal conversational response to Antigravity, explaining your thought proc
         db: AsyncSession,
         session_id: Optional[int]
     ) -> List[Content]:
-        """Build conversation history for Gemini"""
+        """Build conversation history for Gemini, including tool calls and results"""
         history = []
         
-        conversations = await crud.get_conversation_history(db, session_id, limit=20)
+        # Get more history to ensure we have context
+        conversations = await crud.get_conversation_history(db, session_id, limit=30)
         
+        # Sort by creation time to reconstruct correctly
+        conversations.sort(key=lambda x: x.created_at)
+        
+        for conv in conversations:
+            parts = []
+            
+            # If it's a model message, it might have text AND/OR tool calls
+            if conv.role == models.MessageRole.ASSISTANT:
+                if conv.content:
+                    parts.append(Part.from_text(conv.content))
+                
+                if conv.tool_calls:
+                    for tc in conv.tool_calls:
+                        # Vertex AI expects FunctionCall objects
+                        # tc is a dict with 'tool' (name) and 'args'
+                        parts.append(Part.from_function_call(
+                            name=tc['tool'],
+                            args=tc['args']
+                        ))
+                
+                if parts:
+                    history.append(Content(role="model", parts=parts))
+            
+            # If it's a tool result, it must be attributed as a function response
+            # Note: In Vertex AI history, tool results come after the corresponding function calls
+            elif conv.role == models.MessageRole.ASSISTANT and conv.tool_results:
+                 # Should already be handled above as parts of the same model message?
+                 # Actually, tool results are usually sent in a separate message with role 'user' 
+                 # or 'function' depending on the library. In vertexai library, it's often a Content with parts.
+                 pass
+            
+            elif conv.role == models.MessageRole.USER:
+                if conv.content:
+                    parts.append(Part.from_text(conv.content))
+                
+                # Check for tool results associated with this turn or previous assistant turn
+                # In our schema, tool_results are stored in the same row as the assistant message 
+                # that triggered them (for convenience), but we need to feed them back as "system" or "user" responses
+                # Actually, the tool_results are stored in the ASSISTANT message row in our DB.
+                # Let's check the assistant's results and add them as a separate Content block.
+                pass
+                
+        # Re-evaluating representation:
+        # Step 1: User message -> Content(role="user", parts=[text])
+        # Step 2: Model message -> Content(role="model", parts=[text, function_call])
+        # Step 3: Tool response -> Content(role="user", parts=[function_response])
+        
+        history = []
         for conv in conversations:
             if conv.role == models.MessageRole.USER:
                 history.append(Content(role="user", parts=[Part.from_text(conv.content)]))
             elif conv.role == models.MessageRole.ASSISTANT:
-                history.append(Content(role="model", parts=[Part.from_text(conv.content)]))
+                parts = []
+                if conv.content:
+                    parts.append(Part.from_text(conv.content))
+                
+                if conv.tool_calls:
+                    for tc in conv.tool_calls:
+                        parts.append(Part.from_function_call(name=tc['tool'], args=tc['args']))
+                
+                if parts:
+                    history.append(Content(role="model", parts=parts))
+                
+                # If there are results, they MUST follow as a separate Content with 'user' role
+                if conv.tool_results:
+                    result_parts = []
+                    for tc, tr in zip(conv.tool_calls or [], conv.tool_results):
+                        result_parts.append(Part.from_function_response(
+                            name=tc['tool'],
+                            response=tr
+                        ))
+                    if result_parts:
+                        history.append(Content(role="user", parts=result_parts))
         
         return history
     
@@ -302,6 +374,7 @@ Your normal conversational response to Antigravity, explaining your thought proc
             "ideas": None,
             "critique": None,
             "decision": None,
+            "need_block": None,
             "next_steps": None,
             "confidence_score": None,
             "grading_score": None,
@@ -315,6 +388,7 @@ Your normal conversational response to Antigravity, explaining your thought proc
             "ideas": r"\[LLM IDEAS\](.*?)\[LLM",
             "critique": r"\[LLM CRITIQUE\](.*?)\[LLM",
             "decision": r"\[LLM DECISION\](.*?)\[LLM",
+            "need_block": r"\[LLM NEED BLOCK\](.*?)\[LLM",
             "next_steps": r"\[LLM NEXT STEPS\](.*?)\[CONFIDENCE",
             "confidence_score": r"\[CONFIDENCE SCORE\](.*?)\[GRADING",
             "grading_score": r"\[GRADING SCORE\](.*?)\[RESPONSE\]",
@@ -328,6 +402,7 @@ Your normal conversational response to Antigravity, explaining your thought proc
             "ideas": r"\[LLM IDEAS\](.*)",
             "critique": r"\[LLM CRITIQUE\](.*)",
             "decision": r"\[LLM DECISION\](.*)",
+            "need_block": r"\[LLM NEED BLOCK\](.*)",
             "next_steps": r"\[LLM NEXT STEPS\](.*)",
             "confidence_score": r"\[CONFIDENCE SCORE\](.*)",
             "grading_score": r"\[GRADING SCORE\](.*)"
@@ -363,6 +438,7 @@ Your normal conversational response to Antigravity, explaining your thought proc
             llm_findings=parsed["findings"],
             llm_ideas=parsed["ideas"],
             llm_next_steps=parsed["next_steps"],
+            llm_need_block=parsed["need_block"],
             llm_decision=parsed["decision"],
             llm_critique=parsed["critique"],
             llm_confidence_score=parsed["confidence_score"],
