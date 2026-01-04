@@ -12,12 +12,12 @@ from ..config import settings
 class BrowserTool(BaseTool):
     """Playwright-based browser automation tool with persistent sessions"""
     
-    def __init__(self):
+    def __init__(self, state_dir: Path = None):
         self.playwright = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
-        self.state_dir = Path(settings.playwright_state_dir)
+        self.state_dir = state_dir or Path(settings.playwright_state_dir)
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.element_cache: Dict[int, Any] = {}
         self.network_logs = []
