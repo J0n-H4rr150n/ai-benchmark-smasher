@@ -1,6 +1,7 @@
 from typing import Dict, Type, List
 from .base import BaseTool, ToolDefinition
 from .browser import BrowserTool
+from .web_fuzzer import WebFuzzerTool
 
 
 class ToolRegistry:
@@ -13,6 +14,7 @@ class ToolRegistry:
     def _register_default_tools(self):
         """Register default tools"""
         self.register(BrowserTool())
+        self.register(WebFuzzerTool())
     
     def register(self, tool: BaseTool):
         """Register a new tool"""

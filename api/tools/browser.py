@@ -83,6 +83,8 @@ class BrowserTool(BaseTool):
                 "method": request.method,
                 "status": response.status,
                 "timestamp": time.time(),
+                "request_headers": request.headers,
+                "response_headers": response.headers,
                 "body": None
             }
 
@@ -91,7 +93,7 @@ class BrowserTool(BaseTool):
                 content_type = response.headers.get("content-type", "").lower()
                 if "application/json" in content_type:
                     body = await response.json()
-                    log_entry["body"] = str(body)[:500]
+                    log_entry["body"] = str(body)
             except:
                 pass
 
@@ -137,8 +139,10 @@ class BrowserTool(BaseTool):
         if not self.network_logs: return "No recent XHR/Fetch."
         sorted_logs = sorted(self.network_logs, key=lambda x: x['timestamp'], reverse=True)
         summary = []
-        for log in sorted_logs[:15]:
-            summary.append(f"[{log['method']}] {log['status']} {log['url']} \n   Body: {log['body']}")
+        for log in sorted_logs[:50]:
+            req_headers = str(log.get('request_headers', {}))
+            resp_headers = str(log.get('response_headers', {}))
+            summary.append(f"[{log['method']}] {log['status']} {log['url']} \n   Request Headers: {req_headers}\n   Response Headers: {resp_headers}\n   Body: {log['body']}")
         return "\n".join(summary)
 
     async def _clean_marks(self):
@@ -182,7 +186,7 @@ class BrowserTool(BaseTool):
                 items.push({
                     id: counter,
                     tagName: el.tagName.toLowerCase(),
-                    text: el.innerText ? el.innerText.slice(0, 50).replace(/\\n/g, ' ') : '',
+                    text: el.innerText ? el.innerText.replace(/\\n/g, ' ') : '',
                     type: el.type || ''
                 });
                 
@@ -344,16 +348,16 @@ class BrowserTool(BaseTool):
                 # Extract snippets for LLM reasoning
                 snippets = []
                 # Raw comments from dynamic DOM
-                for comment in soup.find_all(string=lambda text: isinstance(text, Comment))[:5]:
-                    snippets.append(f"Comment: {str(comment).strip()[:200]}")
+                for comment in soup.find_all(string=lambda text: isinstance(text, Comment)):
+                    snippets.append(f"Comment: {str(comment).strip()}")
                 
                 # Check raw source for differences (hidden comments)
                 if raw_source != "N/A":
                     raw_soup = BeautifulSoup(raw_source, 'lxml')
                     raw_comments = raw_soup.find_all(string=lambda text: isinstance(text, Comment))
-                    for rc in raw_comments[:5]:
+                    for rc in raw_comments:
                         if str(rc).strip() not in [s.replace("Comment: ", "") for s in snippets]:
-                            snippets.append(f"Raw Source Comment: {str(rc).strip()[:200]}")
+                            snippets.append(f"Raw Source Comment: {str(rc).strip()}")
 
                 result.update({
                     "success": True,
@@ -364,7 +368,7 @@ class BrowserTool(BaseTool):
                     "network": network_summary,
                     "screenshot_path": str(screenshot_path),
                     "html": content, # Still provide for backend flag detection
-                    "raw_source": raw_source[:5000] # Truncated for token safety
+                    "raw_source": raw_source
                 })
                 
             elif action == "auth_state":

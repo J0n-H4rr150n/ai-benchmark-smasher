@@ -1,6 +1,7 @@
 import vertexai
 from vertexai.generative_models import GenerativeModel, Content, Part, Tool, FunctionDeclaration
 from typing import List, Dict, Any, Optional
+from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 import time
@@ -207,82 +208,67 @@ Your normal conversational response to Antigravity, explaining your thought proc
         session_id: Optional[int]
     ) -> List[Content]:
         """Build conversation history for Gemini, including tool calls and results"""
+        if not session_id:
+            return []
+            
         history = []
         
-        # Get more history to ensure we have context
-        conversations = await crud.get_conversation_history(db, session_id, limit=30)
+        # Get history (sorted by created_at in the query if possible, or manually)
+        # conversations = await crud.get_conversation_history(db, session_id, limit=30)
+        # Using a slightly larger limit to ensure we have full context for complex traces
+        query = select(models.Conversation).where(models.Conversation.session_id == session_id).order_by(models.Conversation.created_at.asc())
+        result = await db.execute(query)
+        conversations = result.scalars().all()
         
-        # Sort by creation time to reconstruct correctly
-        conversations.sort(key=lambda x: x.created_at)
-        
-        for conv in conversations:
-            parts = []
-            
-            # If it's a model message, it might have text AND/OR tool calls
-            if conv.role == models.MessageRole.ASSISTANT:
-                if conv.content:
-                    parts.append(Part.from_text(conv.content))
-                
-                if conv.tool_calls:
-                    for tc in conv.tool_calls:
-                        # Vertex AI expects FunctionCall objects
-                        # tc is a dict with 'tool' (name) and 'args'
-                        parts.append(Part.from_function_call(
-                            name=tc['tool'],
-                            args=tc['args']
-                        ))
-                
-                if parts:
-                    history.append(Content(role="model", parts=parts))
-            
-            # If it's a tool result, it must be attributed as a function response
-            # Note: In Vertex AI history, tool results come after the corresponding function calls
-            elif conv.role == models.MessageRole.ASSISTANT and conv.tool_results:
-                 # Should already be handled above as parts of the same model message?
-                 # Actually, tool results are usually sent in a separate message with role 'user' 
-                 # or 'function' depending on the library. In vertexai library, it's often a Content with parts.
-                 pass
-            
-            elif conv.role == models.MessageRole.USER:
-                if conv.content:
-                    parts.append(Part.from_text(conv.content))
-                
-                # Check for tool results associated with this turn or previous assistant turn
-                # In our schema, tool_results are stored in the same row as the assistant message 
-                # that triggered them (for convenience), but we need to feed them back as "system" or "user" responses
-                # Actually, the tool_results are stored in the ASSISTANT message row in our DB.
-                # Let's check the assistant's results and add them as a separate Content block.
-                pass
-                
-        # Re-evaluating representation:
-        # Step 1: User message -> Content(role="user", parts=[text])
-        # Step 2: Model message -> Content(role="model", parts=[text, function_call])
-        # Step 3: Tool response -> Content(role="user", parts=[function_response])
-        
-        history = []
         for conv in conversations:
             if conv.role == models.MessageRole.USER:
-                history.append(Content(role="user", parts=[Part.from_text(conv.content)]))
+                if conv.content:
+                    history.append(Content(role="user", parts=[Part.from_text(conv.content)]))
+            
             elif conv.role == models.MessageRole.ASSISTANT:
                 parts = []
+                # First, add the text content if any
                 if conv.content:
                     parts.append(Part.from_text(conv.content))
                 
+                # Second, add any tool calls (native FunctionCall objects)
                 if conv.tool_calls:
                     for tc in conv.tool_calls:
-                        parts.append(Part.from_function_call(name=tc['tool'], args=tc['args']))
+                        try:
+                            parts.append(Part.from_function_call(
+                                name=tc['tool'],
+                                args=tc['args']
+                            ))
+                        except Exception as e:
+                            logger.error(f"[HISTORY ERROR] Failed to reconstruct tool call {tc.get('tool')}: {e}")
                 
                 if parts:
                     history.append(Content(role="model", parts=parts))
                 
-                # If there are results, they MUST follow as a separate Content with 'user' role
-                if conv.tool_results:
+                # Third, if there are results, they MUST follow as a separate Content with 'user' role
+                if conv.tool_results and conv.tool_calls:
                     result_parts = []
-                    for tc, tr in zip(conv.tool_calls or [], conv.tool_results):
-                        result_parts.append(Part.from_function_response(
-                            name=tc['tool'],
-                            response=tr
-                        ))
+                    # Robust matching: only zip up to the minimum length to avoid crashes, 
+                    # though ideally they should always match.
+                    results_to_process = conv.tool_results
+                    calls_to_process = conv.tool_calls
+                    
+                    if len(results_to_process) != len(calls_to_process):
+                        logger.warning(f"[HISTORY] Mismatch in tool calls ({len(calls_to_process)}) and results ({len(results_to_process)}) for conv {conv.id}")
+                    
+                    for i in range(min(len(calls_to_process), len(results_to_process))):
+                        tc = calls_to_process[i]
+                        tr = results_to_process[i]
+                        try:
+                            # Vertex requires the name to match the function call
+                            if tc and 'tool' in tc:
+                                result_parts.append(Part.from_function_response(
+                                    name=tc['tool'],
+                                    response=tr or {}
+                                ))
+                        except Exception as e:
+                            logger.error(f"[HISTORY ERROR] Failed to reconstruct tool result {i} for {tc.get('tool') if tc else 'unknown'}: {e}")
+                    
                     if result_parts:
                         history.append(Content(role="user", parts=result_parts))
         

@@ -113,7 +113,7 @@ class WebAnalyzer:
             if script.string:
                 scripts.append({
                     "type": "inline",
-                    "content": script.string[:500]  # First 500 chars
+                    "content": script.string
                 })
             elif script.get('src'):
                 scripts.append({
@@ -149,7 +149,7 @@ class WebAnalyzer:
             vulns.append({
                 "type": "base64_encoded_data",
                 "description": f"Found {len(base64_matches)} potential base64 strings",
-                "examples": base64_matches[:3]
+                "examples": base64_matches
             })
         
         return vulns
