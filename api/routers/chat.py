@@ -8,12 +8,17 @@ from ..core.ai_agent import gemini_agent
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+from datetime import datetime
+import time
+from ..config import settings
+
 @router.post("/", response_model=schemas.ChatResponse)
 async def send_chat_message(
     chat_msg: schemas.ChatMessage,
     db: AsyncSession = Depends(get_db)
 ):
     """Send a message to Gemini AI agent"""
+    start_time = time.time()
     
     # Get session context if available
     message_with_context = chat_msg.message
@@ -33,6 +38,8 @@ async def send_chat_message(
         db=db,
         session_id=chat_msg.session_id
     )
+    
+    elapsed = time.time() - start_time
     
     # Get the conversation ID of the assistant's response
     conversations = await crud.get_conversation_history(db, chat_msg.session_id, limit=1)
@@ -58,7 +65,18 @@ async def send_chat_message(
         tool_calls=result.get("tool_calls"),
         tool_results=result.get("tool_results"),
         findings=findings_response if findings_response else None,
-        flags=flags_response if flags_response else None
+        flags=flags_response if flags_response else None,
+        
+        # Metadata
+        model_used=settings.gemini_model,
+        elapsed_time=round(elapsed, 2),
+        timestamp=datetime.now(),
+        
+        # Analysis (if available in result)
+        llm_analysis=result.get("llm_analysis"),
+        llm_critique=result.get("llm_critique"),
+        llm_next_steps=result.get("llm_next_steps"),
+        llm_confidence_score=result.get("llm_confidence_score")
     )
 
 

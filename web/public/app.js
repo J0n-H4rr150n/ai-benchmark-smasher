@@ -18,15 +18,6 @@ const submissionGuidanceBtn = document.getElementById('submitGuidanceBtn');
 // Helper to get API URL
 const getApiUrl = () => API_BASE;
 
-function toggleGallery() {
-    gallerySection.classList.toggle('collapsed');
-    if (gallerySection.classList.contains('collapsed')) {
-        galleryToggleIcon.className = 'fa-solid fa-chevron-right';
-    } else {
-        galleryToggleIcon.className = 'fa-solid fa-chevron-down';
-    }
-}
-
 // Start / Resume Mission
 startBtn.addEventListener('click', async () => {
     // If resuming from pause
@@ -66,7 +57,6 @@ startBtn.addEventListener('click', async () => {
         setInputState(false);
 
         chatContainer.innerHTML = ''; // Clear chat
-        screenshotGallery.innerHTML = ''; // Clear gallery
         addMessage('system', `Mission Started. Session ID: ${SESSION_ID}`);
 
         runMissionLoop();
@@ -231,6 +221,19 @@ function renderAssistantResponse(data) {
 
     if (content.trim()) {
         msgDiv.innerHTML = content.replace(/\n/g, '<br>');
+
+        // Metadata Footer
+        if (data.timestamp || data.model_used) {
+            const footer = document.createElement('div');
+            footer.className = 'message-footer';
+            const timeStr = data.timestamp ? new Date(data.timestamp).toLocaleString() : '';
+            const modelStr = data.model_used || 'Unknown Model';
+            const elapsedStr = data.elapsed_time ? ` | ${data.elapsed_time}s` : '';
+
+            footer.innerText = `${timeStr} | ${modelStr}${elapsedStr}`;
+            msgDiv.appendChild(footer);
+        }
+
         chatContainer.appendChild(msgDiv);
     }
 
@@ -243,22 +246,6 @@ function renderAssistantResponse(data) {
     }
 }
 
-function addScreenshot(fullPath) {
-    // Convert API file path to static URL
-    // e.g. /app/.playwright/screenshot_xyz.png -> http://localhost:8000/screenshots/screenshot_xyz.png
-    const filename = fullPath.split(/[\/\\]/).pop();
-    const url = `${getApiUrl()}/screenshots/${filename}`;
-
-    const card = document.createElement('div');
-    card.className = 'screenshot-card';
-    card.innerHTML = `
-        <img src="${url}" onclick="window.open('${url}')">
-        <div class="meta">${new Date().toLocaleTimeString()}</div>
-    `;
-
-    // Add to beginning
-    screenshotGallery.prepend(card);
-}
 
 function addInlineScreenshot(fullPath) {
     const filename = fullPath.split(/[\/\\]/).pop();

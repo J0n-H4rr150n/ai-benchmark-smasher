@@ -95,6 +95,17 @@ class ChatResponse(BaseModel):
     tool_results: Optional[List[Dict[str, Any]]] = None
     findings: Optional[List[FindingResponse]] = None
     flags: Optional[List[FlagResponse]] = None
+    
+    # Metadata
+    model_used: Optional[str] = None
+    elapsed_time: Optional[float] = None
+    timestamp: Optional[datetime] = None
+    
+    # Analysis fields (optional, if we want to expose structured thoughts)
+    llm_analysis: Optional[str] = None
+    llm_critique: Optional[str] = None
+    llm_next_steps: Optional[str] = None
+    llm_confidence_score: Optional[str] = None
 
 
 class HealthResponse(BaseModel):

@@ -312,8 +312,9 @@ class BrowserTool(BaseTool):
                     result["error"] = "element_id or selector is required for type action"
                     return result
                 
-                result["success"] = True
-                
+                # Auto-extract to capture screenshot of typed state
+                return await self.execute(action="extract")
+
             elif action == "submit":
                 element_id = kwargs.get("element_id")
                 selector = kwargs.get("selector", "form")
