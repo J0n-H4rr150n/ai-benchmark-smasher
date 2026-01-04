@@ -50,3 +50,4 @@ alembic/versions/*.pyc
 
 # Misc
 log/
+log_*/
