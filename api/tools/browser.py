@@ -88,12 +88,15 @@ class BrowserTool(BaseTool):
                 "body": None
             }
 
-            # Capture JSON bodies (limited size)
+            # Capture bodies for JSON and text content
             try:
                 content_type = response.headers.get("content-type", "").lower()
                 if "application/json" in content_type:
                     body = await response.json()
                     log_entry["body"] = str(body)
+                elif "text/" in content_type:
+                    body = await response.text()
+                    log_entry["body"] = body
             except:
                 pass
 
@@ -142,7 +145,18 @@ class BrowserTool(BaseTool):
         for log in sorted_logs[:50]:
             req_headers = str(log.get('request_headers', {}))
             resp_headers = str(log.get('response_headers', {}))
-            summary.append(f"[{log['method']}] {log['status']} {log['url']} \n   Request Headers: {req_headers}\n   Response Headers: {resp_headers}\n   Body: {log['body']}")
+            body_val = log.get('body')
+            
+            if body_val is None:
+                body_str = "{not captured}"
+            elif str(body_val).strip() == "":
+                body_str = "{empty}"
+            else:
+                body_str = str(body_val)
+                if len(body_str) > 500:
+                    body_str = body_str[:500] + "... [Truncated]"
+            
+            summary.append(f"[{log['method']}] {log['status']} {log['url']} \n   Request Headers: {req_headers}\n   Response Headers: {resp_headers}\n   Body: {body_str}")
         return "\n".join(summary)
 
     async def _clean_marks(self):

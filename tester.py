@@ -7,6 +7,29 @@ import threading
 from datetime import datetime
 import tester_framework as fw
 
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+from rich.rule import Rule
+from rich.theme import Theme
+from rich.live import Live
+from rich.table import Table
+
+# Custom theme for CTF
+custom_theme = Theme({
+    "info": "dim cyan",
+    "warning": "magenta",
+    "danger": "bold red",
+    "success": "bold green",
+    "gemini": "bold purple",
+    "tool": "bold blue",
+    "finding": "green",
+    "decision": "cyan",
+    "step": "bold yellow"
+})
+
+console = Console(theme=custom_theme)
+
 # Global state for interrupt handling
 IS_AI_RUNNING = False
 
@@ -17,61 +40,57 @@ def run_interaction_loop(session_id, last_message, run_data, log_file, max_turns
     
     while local_turn <= max_turns:
         IS_AI_RUNNING = True
-        print(f"\n--- Batch Turn {local_turn} ---")
+        console.print(Rule(f"[bold yellow]Turn {local_turn}[/bold yellow]", style="yellow"))
+        
         turn_start = time.time()
         
-        # Thinking indicator thread
-        stop_thinking = threading.Event()
-        def thinking_timer():
-            while not stop_thinking.is_set():
-                elapsed = time.time() - turn_start
-                # Clear line and print
-                sys.stdout.write(f"\r   (Gemini is thinking... {elapsed:.1f}s)")
-                sys.stdout.flush()
-                time.sleep(0.1)
-        
-        t = threading.Thread(target=thinking_timer, daemon=True)
-        t.start()
-        
-        try:
-            data = fw.execute_turn(session_id, last_message)
-        finally:
-            stop_thinking.set()
-            t.join()
-            sys.stdout.write("\r" + " " * 50 + "\r") # Clear the thinking line
-            sys.stdout.flush()
+        # Thinking indicator
+        with console.status("[bold purple]Gemini is thinking...", spinner="dots"):
+            try:
+                data = fw.execute_turn(session_id, last_message)
+            except KeyboardInterrupt:
+                # Pass it up
+                raise
             
         duration = time.time() - turn_start
-        print(f"   ✓ Thought for {duration:.1f}s")
+        console.print(f"[dim]✓ Thought for {duration:.1f}s[/dim]")
         
         if "error" in data:
-            print(f"   ✗ Stopping batch due to error.")
+            console.print(Panel(f"[danger]Backend Error:[/danger] {data['error']}", border_style="red"))
             break
             
         global_step = data.get('step_number', 'unknown')
-        print(f"--- Global STEP {global_step} ---")
         
+        # Main AI Response
         if data.get('content'):
-            print(f"\n[Gemini]: {data['content']}\n")
+            console.print(Panel(Text(data['content'], style="white"), title="[gemini]Gemini[/gemini]", border_style="purple"))
 
-        # Print Structured Analysis
-        if data.get('llm_findings') and data['llm_findings'] != "None": 
-            print(f"  - Findings: {data['llm_findings']}")
-        if data.get('llm_decision'): 
-            print(f"  - Decision: {data['llm_decision']}")
+        # Insights Panel
+        insights = []
+        if data.get('llm_findings') and data['llm_findings'] != "None":
+            insights.append(f"[finding]Findings:[/finding] {data['llm_findings']}")
+        if data.get('llm_decision'):
+            insights.append(f"[decision]Decision:[/decision] {data['llm_decision']}")
+        
+        if insights:
+            console.print(Panel("\n".join(insights), title="[bold white]Analysis[/bold white]", border_style="dim white"))
 
         # Get tool results for display
         assistant_msg = fw.get_recent_history(session_id)
         
         if data.get('tool_calls'):
-            print(f"\n[Tool Calls]: {[tc['tool'] for tc in data['tool_calls']]}")
+            tool_names = ", ".join([f"[tool]{tc['tool']}[/tool]" for tc in data['tool_calls']])
+            console.print(f"🛠️  [bold]Tool Calls:[/bold] {tool_names}")
             last_message = "Continue"
+            
             if assistant_msg and assistant_msg.get('tool_results'):
                 for res in assistant_msg['tool_results']:
                     if 'network' in res:
-                        print(f"    Network: {res['network'].strip()}")
+                        # Print network summary neatly
+                        net_info = res['network'].strip()
+                        console.print(Panel(net_info, title="[dim]Network Traffic[/dim]", border_style="dim blue", padding=(0,1)))
         else:
-            print(f"\n[AI finished its thought]")
+            console.print("\n[dim italic]AI finished its thought, standing by...[/dim italic]")
         
         # Record turn
         turn_info = {
@@ -93,16 +112,19 @@ def run_interaction_loop(session_id, last_message, run_data, log_file, max_turns
             break
 
         local_turn += 1
-        time.sleep(2) # Breath between turns
+        time.sleep(1) # Small breath
         
     IS_AI_RUNNING = False
     return last_message
 
 def main():
     global IS_AI_RUNNING
-    print("========================================")
-    print("   AI MISSION CONTROL - CTF TESTER")
-    print("========================================\n")
+    
+    console.print(Panel.fit(
+        "[bold yellow]MISSION CONTROL[/bold yellow]\n[dim]AI-Powered Vulnerability Research[/dim]",
+        border_style="yellow",
+        padding=(1, 4)
+    ))
 
     # 1. SETUP WIZARD
     latest_log_path = fw.find_latest_log()
@@ -115,17 +137,20 @@ def main():
             with open(latest_log_path, 'r') as f:
                 resume_data = json.load(f)
             
-            print(f"  Target: {resume_data['target_url']}")
-            print(f"  Goal: {resume_data['goal']}")
+            console.print(Panel(
+                f"[bold cyan]Target:[/bold cyan] {resume_data['target_url']}\n"
+                f"[bold cyan]Goal:[/bold cyan] {resume_data['goal']}",
+                title="Latest Session Detected",
+                border_style="cyan"
+            ))
             
-            choice = input("\nDo you want to RESUME this session? (y/n): ").lower()
+            choice = console.input("\n[bold yellow]Do you want to RESUME this session? (y/n): [/bold yellow]").lower()
             if choice == 'y':
                 session_id = resume_data["session_id"]
                 target_url = resume_data["target_url"]
                 goal = resume_data["goal"] or goal
                 
-                print("\n[!] IMPORTANT: Authentication state (cookies/session) is NOT maintained across script restarts.")
-                print("    If the mission requires being logged in, the AI will need to re-authenticate.\n")
+                console.print("\n[warning][!] IMPORTANT:[/warning] Authentication state (cookies/session) is NOT maintained across script restarts.\n")
 
                 # Load summary
                 summary_path = f"log/summaries/summary_{os.path.basename(latest_log_path).replace('.json', '.md')}"
@@ -138,16 +163,16 @@ def main():
                     initial_context += f"Last findings: {last_turn['raw_response'].get('llm_findings', 'None') if last_turn else 'None'}"
                 
                 last_message = f"{initial_context}\n\nPlease continue the investigation."
-                print(f"✓ Resuming Session {session_id}...")
+                console.print(f"[success]✓ Resuming Session {session_id}...[/success]")
             else:
                 resume_data = None
 
         if not resume_data:
-            target_url = input(f"Target URL [{target_url}]: ") or target_url
-            goal_input = input(f"Mission Goal [{goal}]: ")
+            target_url = console.input(f"[bold white]Target URL[/bold white] [dim]({target_url})[/dim]: ") or target_url
+            goal_input = console.input(f"[bold white]Mission Goal[/bold white] [dim]({goal})[/dim]: ")
             if goal_input: goal = goal_input
             
-            print(f"\n[!] Creating New Mission Session...")
+            console.print(f"\n[bold info]Creating New Mission Session...[/bold info]")
             resp = requests.post(f"{fw.BASE_URL}/sessions", json={
                 "target_url": target_url,
                 "goal": goal
@@ -155,19 +180,19 @@ def main():
             resp.raise_for_status()
             session_id = resp.json()["id"]
             last_message = goal
-            print(f"✓ Started New Session {session_id}...")
+            console.print(f"[success]✓ Started New Session {session_id}...[/success]")
 
     except KeyboardInterrupt:
-        print("\n[Exiting Setup...]")
+        console.print("\n[warning]Exiting Setup...[/warning]")
         return
     except Exception as e:
-        print(f"   ✗ Connection/Setup Failed: {e}")
+        console.print(f"\n[danger]✗ Connection/Setup Failed:[/danger] {e}")
         return
 
     # 2. MAIN INTERACTIVE LOOP
-    print("\nEntering Mission Loop. Type 'exit' to quit, or hit Enter to start/continue autonomous run.")
-    print("[!] During a run, press Ctrl+C to PAUSE and return to Mission Control.")
-    print("[!] Press Ctrl+C at the prompt to EXIT Mission Control.\n")
+    console.print(Rule(style="dim"))
+    console.print("[info]Type 'exit' to quit, or hit Enter to start/continue autonomous run.[/info]")
+    console.print("[dim]During a run, press Ctrl+C to PAUSE. At prompt, press Ctrl+C to EXIT.[/dim]\n")
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     log_file = f"log/runs/tester_{timestamp}.json"
@@ -184,53 +209,55 @@ def main():
     while True:
         try:
             IS_AI_RUNNING = False
-            user_input = input("\n[Mission Control] > ").strip()
+            user_input = console.input("\n[bold yellow]Mission Control[/bold yellow] > ").strip()
             
             if user_input.lower() == 'exit':
                 break
                 
             if user_input:
-                # User gave specific feedback or hint
                 last_message = user_input
-                print(f"✓ Injecting guidance and resuming run...")
+                console.print(f"[success]✓ Injecting guidance and resuming run...[/success]")
             else:
-                print(f"✓ Resuming autonomous run...")
+                console.print(f"[success]✓ Resuming autonomous run...[/success]")
             
-            # 2. Handle AI Execution
-            # Inside run_interaction_loop, IS_AI_RUNNING will be set to True
+            # Run execution batch
             last_message = run_interaction_loop(session_id, last_message, current_run_data, log_file, max_turns=20)
-            print("\n[Return to Mission Control]")
+            console.print("\n[dim]-- Return to Mission Control --[/dim]")
             
         except KeyboardInterrupt:
             if IS_AI_RUNNING:
-                print("\n\n[!] MISSION PAUSED. Standing by for instructions...")
-                last_message = "Continue" # Default for next Enter
+                console.print("\n\n[warning][!] MISSION PAUSED.[/warning] Standing by for instructions...")
+                last_message = "Continue"
                 IS_AI_RUNNING = False
                 continue
             else:
-                print("\n[Exiting Mission Control...]")
+                console.print("\n[warning][!] Exiting Mission Control...[/warning]")
                 break
         except Exception as e:
-            print(f"\n[!] Unexpected Error in Main Loop: {e}")
+            console.print(f"\n[danger]✗ Unexpected Error in Main Loop:[/danger] {e}")
             break
 
     # 3. CLEANUP & SUMMARY
     try:
-        print("\n[Ending Session]")
-        summary_file, summary_md = fw.generate_markdown_summary(current_run_data, log_file)
+        console.print(Rule(style="dim"))
+        console.print("[bold yellow]Ending Session[/bold yellow]")
+        with console.status("[bold cyan]Generating mission summary...", spinner="dots"):
+            summary_file, _ = fw.generate_markdown_summary(current_run_data, log_file)
+        
         if summary_file:
-            print(f"✓ Summary generated: {summary_file}")
-        print(f"Session data saved to {log_file}")
+            console.print(f"[success]✓ Summary generated:[/success] [link=file://{summary_file}]{os.path.basename(summary_file)}[/link]")
+        console.print(f"[success]✓ Session data saved to:[/success] {log_file}")
     except KeyboardInterrupt:
-        print("\n[Cleanup Interrupted. Data saved to log.]")
+        console.print("\n[warning]Cleanup Interrupted. Data saved to log.[/warning]")
     except Exception as e:
-        print(f"   ✗ Summary generation failed: {e}")
+        console.print(f"\n[danger]✗ Summary generation failed:[/danger] {e}")
 
 if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        pass # Already handled inside main for specific messages
+        pass
     finally:
-        print("\n[Mission Closed]")
+        console.print(Rule(style="yellow"))
+        console.print("[bold yellow]MISSION CLOSED[/bold yellow]", justify="center")
         sys.exit(0)
