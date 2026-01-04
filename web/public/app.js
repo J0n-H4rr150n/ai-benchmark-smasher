@@ -189,7 +189,8 @@ function renderAssistantResponse(data) {
         console.log("[DEBUG] Tool Results:", data.tool_results); // Debugging line
         data.tool_results.forEach(res => {
             try {
-                let params = res.result;
+                // Backend returns flat object, but handle legacy nested structure just in case
+                let params = res.result || res;
                 let screenshotPath = null;
 
                 if (typeof params === 'string') {
