@@ -440,8 +440,41 @@ Your normal conversational response to Antigravity, explaining your thought proc
             f"llm_{k}": v for k, v in parsed.items() if k != "response"
         })
         
+        # Log to JSON file
+        await self._log_to_json(session_id, step_number, result)
+        
         return result
 
+    async def _log_to_json(self, session_id: int, step_number: int, result: Dict[str, Any]):
+        """Log execution step to JSON file"""
+        import json
+        import os
+        from datetime import datetime
+        
+        log_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "session_id": session_id,
+            "step": step_number,
+            "content": result.get("content"),
+            "tool_calls": result.get("tool_calls"),
+            "tool_results": result.get("tool_results"),
+            "flags": result.get("flags"),
+            "findings": result.get("findings"),
+            "analysis": result.get("llm_analysis"),
+            "decision": result.get("llm_decision"),
+            "next_steps": result.get("llm_next_steps")
+        }
+        
+        try:
+            os.makedirs("logs", exist_ok=True)
+            log_file = "logs/runs.json"
+            
+            # Append mode - JSONL style for safety
+            with open(log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry, default=str) + "\n")
+                
+        except Exception as e:
+            logger.error(f"[LOGGING ERROR] Failed to write to {log_file}: {e}")
 
 # Global agent instance
 gemini_agent = GeminiAgent()

@@ -186,6 +186,7 @@ function renderAssistantResponse(data) {
 
     // 2. Logic to Find and Display Screenshots INLINE
     if (data.tool_results) {
+        console.log("[DEBUG] Tool Results:", data.tool_results); // Debugging line
         data.tool_results.forEach(res => {
             try {
                 let params = res.result;
@@ -221,20 +222,19 @@ function renderAssistantResponse(data) {
 
     if (content.trim()) {
         msgDiv.innerHTML = content.replace(/\n/g, '<br>');
+        chatContainer.appendChild(msgDiv); // Text Bubble
 
-        // Metadata Footer
+        // Metadata (Outside Bubble)
         if (data.timestamp || data.model_used) {
-            const footer = document.createElement('div');
-            footer.className = 'message-footer';
+            const metaDiv = document.createElement('div');
+            metaDiv.className = 'message-meta';
             const timeStr = data.timestamp ? new Date(data.timestamp).toLocaleString() : '';
             const modelStr = data.model_used || 'Unknown Model';
             const elapsedStr = data.elapsed_time ? ` | ${data.elapsed_time}s` : '';
 
-            footer.innerText = `${timeStr} | ${modelStr}${elapsedStr}`;
-            msgDiv.appendChild(footer);
+            metaDiv.innerText = `${timeStr} | ${modelStr}${elapsedStr}`;
+            chatContainer.appendChild(metaDiv);
         }
-
-        chatContainer.appendChild(msgDiv);
     }
 
     // Scroll to bottom
