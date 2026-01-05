@@ -186,10 +186,17 @@ Your normal conversational response to Antigravity, explaining your thought proc
 
         try:
             tool_count = len(result.get("tool_calls") or [])
+            tool_names = []
+            for tc in (result.get("tool_calls") or []):
+                if isinstance(tc, dict) and tc.get("tool"):
+                    tool_names.append(str(tc.get("tool")))
+            tool_names_str = ",".join(tool_names[:8])
+            if len(tool_names) > 8:
+                tool_names_str += f",…(+{len(tool_names) - 8})"
             flags_count = len(result.get("flags") or [])
             goal_complete = bool(result.get("content")) and ("GOAL-COMPLETE" in result.get("content", ""))
             logger.info(
-                f"[STEP END] session={session_id} step={next_step} tools={tool_count} flags={flags_count} goal_complete={goal_complete}"
+                f"[STEP END] session={session_id} step={next_step} tools={tool_count} tool_names={tool_names_str} flags={flags_count} goal_complete={goal_complete}"
             )
         except Exception:
             logger.info(f"[STEP END] session={session_id} step={next_step}")
