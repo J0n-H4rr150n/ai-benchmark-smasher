@@ -310,3 +310,82 @@ async function triggerHumanIntervention(data) {
         };
     });
 }
+
+// --- History Logic ---
+
+async function loadSessionHistory() {
+    try {
+        const res = await fetch(`${getApiUrl()}/chat/sessions?limit=50`);
+        const sessions = await res.json();
+        renderSessionList(sessions);
+    } catch (e) {
+        console.error("Failed to load history:", e);
+    }
+}
+
+function renderSessionList(sessions) {
+    const listForDom = document.getElementById('sessionList');
+    listForDom.innerHTML = '';
+
+    sessions.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'session-item';
+        if (s.id === SESSION_ID) item.classList.add('active');
+
+        const date = new Date(s.updated_at).toLocaleString();
+        const shortGoal = s.goal ? (s.goal.substring(0, 40) + '...') : s.target_url;
+
+        item.innerHTML = `
+            <div class="session-main">${shortGoal}</div>
+            <div class="session-meta">
+                <span class="session-id">#${s.id}</span>
+                <span>${date}</span>
+            </div>
+        `;
+
+        item.onclick = () => loadSession(s.id);
+        listForDom.appendChild(item);
+    });
+}
+
+async function loadSession(id) {
+    SESSION_ID = id;
+    IS_RUNNING = false;
+    updateStatus('HISTORY VIEW');
+    chatContainer.innerHTML = '';
+
+    // Highlight active
+    document.querySelectorAll('.session-item').forEach(el => el.classList.remove('active'));
+    // (Ideally find specific item and add active, but redraw works too)
+
+    try {
+        const res = await fetch(`${getApiUrl()}/chat/history?session_id=${id}&limit=100`);
+        const history = await res.json(); // Ordered chronologically
+
+        history.forEach(msg => {
+            if (msg.role === 'user') {
+                addMessage('user', msg.content);
+            } else {
+                renderAssistantResponse({
+                    content: msg.content,
+                    tool_calls: msg.tool_calls,
+                    tool_results: msg.tool_results,
+                    llm_analysis: msg.llm_analysis,
+                    llm_critique: msg.llm_critique,
+                    llm_next_steps: msg.llm_next_steps,
+                    llm_confidence_score: msg.llm_confidence_score,
+                    timestamp: msg.created_at
+                });
+            }
+        });
+
+        // Refresh list to show active state
+        loadSessionHistory();
+
+    } catch (e) {
+        console.error("Failed to load session:", e);
+    }
+}
+
+// Init
+loadSessionHistory();

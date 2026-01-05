@@ -80,6 +80,16 @@ async def send_chat_message(
     )
 
 
+@router.get("/sessions", response_model=list[schemas.SessionResponse])
+async def get_sessions(
+    limit: int = 20,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get listing of past sessions"""
+    sessions = await crud.get_all_sessions(db, limit)
+    return [schemas.SessionResponse.model_validate(s) for s in sessions]
+
+
 @router.get("/history", response_model=list[schemas.ConversationResponse])
 async def get_chat_history(
     session_id: int = None,

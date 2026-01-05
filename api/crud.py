@@ -37,6 +37,16 @@ async def update_session_status(db: AsyncSession, session_id: int, status: model
         await db.flush()
 
 
+async def get_all_sessions(db: AsyncSession, limit: int = 20) -> List[models.CTFSession]:
+    """Get all sessions ordered by updated_at desc"""
+    result = await db.execute(
+        select(models.CTFSession)
+        .order_by(desc(models.CTFSession.updated_at))
+        .limit(limit)
+    )
+    return list(result.scalars().all())
+
+
 # Conversation CRUD
 async def create_conversation(
     db: AsyncSession,
