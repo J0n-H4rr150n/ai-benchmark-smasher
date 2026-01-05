@@ -27,6 +27,28 @@ NOVNC_PORT="${NOVNC_PORT:-6080}"
 DISPLAY_NUM="${DISPLAY_NUM:-99}"
 SCREEN_GEOMETRY="${SCREEN_GEOMETRY:-1280x800x24}"
 
+RUN_MIGRATIONS="${RUN_MIGRATIONS:-1}"
+MIGRATION_MAX_RETRIES="${MIGRATION_MAX_RETRIES:-30}"
+MIGRATION_RETRY_SLEEP_SECS="${MIGRATION_RETRY_SLEEP_SECS:-2}"
+
+if truthy "$RUN_MIGRATIONS"; then
+  echo "[migrations] Running alembic upgrade head"
+  i=1
+  while :; do
+    if alembic upgrade head; then
+      echo "[migrations] OK"
+      break
+    fi
+    if [ "$i" -ge "$MIGRATION_MAX_RETRIES" ]; then
+      echo "[migrations] Failed after ${MIGRATION_MAX_RETRIES} attempts" >&2
+      exit 1
+    fi
+    echo "[migrations] Retry ${i}/${MIGRATION_MAX_RETRIES} in ${MIGRATION_RETRY_SLEEP_SECS}s..." >&2
+    i=$((i + 1))
+    sleep "$MIGRATION_RETRY_SLEEP_SECS"
+  done
+fi
+
 if truthy "$ENABLE_NOVNC" || falsy "$PLAYWRIGHT_HEADLESS"; then
   export DISPLAY=":${DISPLAY_NUM}"
   echo "[noVNC] Starting Xvfb on $DISPLAY ($SCREEN_GEOMETRY)"
@@ -53,6 +75,10 @@ if truthy "$ENABLE_NOVNC" || falsy "$PLAYWRIGHT_HEADLESS"; then
   websockify --web="$NOVNC_WEB_DIR" "0.0.0.0:$NOVNC_PORT" "127.0.0.1:$VNC_PORT" &
 
   echo "[noVNC] Open: http://localhost:${NOVNC_PORT}/vnc.html?autoconnect=1&resize=scale"
+fi
+
+if [ "$#" -gt 0 ]; then
+  exec "$@"
 fi
 
 exec uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload

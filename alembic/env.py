@@ -8,7 +8,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from api.database import Base
-from api.models import CTFSession, Conversation, Finding, Flag, Embedding
+from api.models import CTFSession, Conversation, Finding, Flag, Embedding, SuccessfulRun
 from api.config import settings
 
 # this is the Alembic Config object
