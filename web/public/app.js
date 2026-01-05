@@ -3,6 +3,11 @@ let SESSION_ID = null;
 let IS_RUNNING = false;
 let TURN_COUNT = 0;
 
+// In-flight request UI state
+let THINKING_INTERVAL_ID = null;
+let THINKING_STARTED_AT = null;
+let THINKING_ELEMENT = null;
+
 // DOM Elements
 const startBtn = document.getElementById('startBtn');
 const pauseBtn = document.getElementById('pauseBtn');
@@ -14,6 +19,94 @@ const sendBtn = document.getElementById('sendBtn');
 const hitlModal = document.getElementById('hitlModal');
 const humanInput = document.getElementById('humanInput');
 const submissionGuidanceBtn = document.getElementById('submitGuidanceBtn');
+
+// DOMPurify is loaded locally from /vendor/dompurify/purify.min.js (see index.html)
+function sanitizeHtml(unsafeHtml) {
+    if (unsafeHtml == null) return '';
+    if (typeof DOMPurify === 'undefined') return String(unsafeHtml);
+    return DOMPurify.sanitize(String(unsafeHtml), {
+        USE_PROFILES: { html: true }
+    });
+}
+
+function showThinkingIndicator() {
+    hideThinkingIndicator();
+
+    THINKING_STARTED_AT = performance.now();
+
+    const row = document.createElement('div');
+    row.className = 'thinking-row';
+
+    const spinner = document.createElement('div');
+    spinner.className = 'thinking-spinner';
+
+    const text = document.createElement('div');
+    text.className = 'thinking-text';
+    text.textContent = 'Thinking… 0.0s';
+
+    row.appendChild(spinner);
+    row.appendChild(text);
+    chatContainer.appendChild(row);
+    THINKING_ELEMENT = row;
+
+    THINKING_INTERVAL_ID = window.setInterval(() => {
+        if (!THINKING_ELEMENT) return;
+        const elapsedMs = performance.now() - THINKING_STARTED_AT;
+        const elapsedSec = (elapsedMs / 1000).toFixed(1);
+        text.textContent = `Thinking… ${elapsedSec}s`;
+    }, 100);
+
+    scrollToBottom();
+}
+
+function hideThinkingIndicator() {
+    if (THINKING_INTERVAL_ID) {
+        window.clearInterval(THINKING_INTERVAL_ID);
+        THINKING_INTERVAL_ID = null;
+    }
+    THINKING_STARTED_AT = null;
+    if (THINKING_ELEMENT && THINKING_ELEMENT.parentNode) {
+        THINKING_ELEMENT.parentNode.removeChild(THINKING_ELEMENT);
+    }
+    THINKING_ELEMENT = null;
+}
+
+// Regression guard: prevent accidentally reintroducing HTML sinks.
+// This app should never set non-empty innerHTML with untrusted data.
+(function installInnerHtmlGuard() {
+    if (window.__DISABLE_HTML_SINK_GUARDS__) return;
+
+    const isNonEmpty = (value) => {
+        if (value == null) return false;
+        return String(value).trim().length > 0;
+    };
+
+    try {
+        const desc = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+        if (!desc || typeof desc.set !== 'function' || typeof desc.get !== 'function') return;
+        if (desc.set.__innerHtmlGuarded) return;
+
+        const originalSet = desc.set;
+        const originalGet = desc.get;
+        const guardedSet = function (value) {
+            if (isNonEmpty(value)) {
+                throw new Error('Blocked non-empty innerHTML assignment. Use textContent or sanitize explicitly.');
+            }
+            return originalSet.call(this, value);
+        };
+        guardedSet.__innerHtmlGuarded = true;
+
+        Object.defineProperty(Element.prototype, 'innerHTML', {
+            configurable: true,
+            enumerable: desc.enumerable,
+            get: originalGet,
+            set: guardedSet
+        });
+    } catch (e) {
+        // If the browser blocks patching the descriptor, fail open but warn.
+        console.warn('Could not install innerHTML guard:', e);
+    }
+})();
 
 // Helper to get API URL
 const getApiUrl = () => API_BASE;
@@ -145,13 +238,22 @@ async function executeTurn(messageInput) {
     TURN_COUNT++;
     document.getElementById('turnCount').innerText = TURN_COUNT;
 
-    const response = await fetch(`${getApiUrl()}/chat/`, {
-        method: 'POST',
-        body: JSON.stringify({ session_id: SESSION_ID, message: messageInput }),
-        headers: { 'Content-Type': 'application/json' }
-    });
+    showThinkingIndicator();
 
-    const data = await response.json();
+    let response;
+    let data;
+    try {
+        response = await fetch(`${getApiUrl()}/chat/`, {
+            method: 'POST',
+            body: JSON.stringify({ session_id: SESSION_ID, message: messageInput }),
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        data = await response.json();
+    } finally {
+        hideThinkingIndicator();
+    }
+
     renderAssistantResponse(data);
 
     if (data.llm_confidence_score && parseFloat(data.llm_confidence_score) < 0.5) {
@@ -171,11 +273,21 @@ async function executeTurn(messageInput) {
 
 // Render Messages & Screenshots
 function renderAssistantResponse(data) {
-    // 0. Step Header
-    const stepDiv = document.createElement('div');
-    stepDiv.className = 'step-header';
-    stepDiv.innerText = `Step ${TURN_COUNT}`;
-    chatContainer.appendChild(stepDiv);
+    // 0. Collapsible Step Container
+    const stepDetails = document.createElement('details');
+    stepDetails.className = 'step-container';
+    stepDetails.open = true;
+
+    const stepSummary = document.createElement('summary');
+    stepSummary.className = 'step-summary';
+    stepSummary.textContent = `Step ${TURN_COUNT}`;
+    stepDetails.appendChild(stepSummary);
+
+    chatContainer.appendChild(stepDetails);
+
+    const stepBody = document.createElement('div');
+    stepBody.className = 'step-body';
+    stepDetails.appendChild(stepBody);
 
     // 1. Tool Calls
     if (data.tool_calls) {
@@ -183,7 +295,7 @@ function renderAssistantResponse(data) {
             const toolDiv = document.createElement('div');
             toolDiv.className = 'tool-call';
             toolDiv.innerText = `🛠️ ${tc.tool}(${JSON.stringify(tc.args)})`;
-            chatContainer.appendChild(toolDiv);
+            stepBody.appendChild(toolDiv);
         });
     }
 
@@ -208,7 +320,7 @@ function renderAssistantResponse(data) {
                 }
 
                 if (screenshotPath) {
-                    addInlineScreenshot(screenshotPath, !!data.skipScroll);
+                    addInlineScreenshot(screenshotPath, !!data.skipScroll, stepBody);
                 }
             } catch (e) { console.error("Error parsing tool result", e); }
         });
@@ -218,15 +330,32 @@ function renderAssistantResponse(data) {
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message assistant';
 
-    let content = "";
-    if (data.llm_analysis) content += `<strong>Analysis:</strong> ${data.llm_analysis}\n\n`;
-    if (data.llm_critique) content += `<strong>Critique:</strong> ${data.llm_critique}\n\n`;
-    if (data.llm_next_steps) content += `<strong>Next:</strong> ${data.llm_next_steps}\n\n`;
-    if (data.content) content += data.content;
+    const appendTextBlock = (label, text) => {
+        if (!text) return;
+        const section = document.createElement('div');
+        section.className = 'assistant-section';
 
-    if (content.trim()) {
-        msgDiv.innerHTML = content.replace(/\n/g, '<br>');
-        chatContainer.appendChild(msgDiv); // Text Bubble
+        if (label) {
+            const strong = document.createElement('strong');
+            strong.textContent = `${label}:`;
+            section.appendChild(strong);
+        }
+
+        const pre = document.createElement('pre');
+        pre.className = 'assistant-pre';
+        pre.textContent = text;
+        section.appendChild(pre);
+
+        msgDiv.appendChild(section);
+    };
+
+    appendTextBlock('Analysis', data.llm_analysis);
+    appendTextBlock('Critique', data.llm_critique);
+    appendTextBlock('Next', data.llm_next_steps);
+    appendTextBlock(null, data.content);
+
+    if (msgDiv.textContent && msgDiv.textContent.trim()) {
+        stepBody.appendChild(msgDiv); // Text Bubble
 
         // Metadata (Outside Bubble)
         if (data.timestamp || data.model_used) {
@@ -237,7 +366,7 @@ function renderAssistantResponse(data) {
             const elapsedStr = data.elapsed_time ? ` | ${data.elapsed_time}s` : '';
 
             metaDiv.innerText = `${timeStr} | ${modelStr}${elapsedStr}`;
-            chatContainer.appendChild(metaDiv);
+            stepBody.appendChild(metaDiv);
         }
     }
 
@@ -253,9 +382,10 @@ function renderAssistantResponse(data) {
 }
 
 
-function addInlineScreenshot(fullPath, skipScroll = false) {
+function addInlineScreenshot(fullPath, skipScroll = false, parentEl = chatContainer) {
     const filename = fullPath.split(/[\/\\]/).pop();
-    const url = `${getApiUrl()}/screenshots/${filename}`;
+    const safeFilename = encodeURIComponent(filename || '');
+    const url = `${getApiUrl()}/screenshots/${safeFilename}`;
 
     const img = document.createElement('img');
     img.className = 'chat-thumbnail';
@@ -268,7 +398,7 @@ function addInlineScreenshot(fullPath, skipScroll = false) {
         if (!skipScroll) scrollToBottom();
     };
 
-    chatContainer.appendChild(img);
+    parentEl.appendChild(img);
 }
 
 function addMessage(role, text, skipScroll = false) {
@@ -349,13 +479,24 @@ function renderSessionList(sessions) {
         const date = new Date(s.updated_at).toLocaleString();
         const shortGoal = s.goal ? (s.goal.substring(0, 40) + '...') : s.target_url;
 
-        item.innerHTML = `
-            <div class="session-main">${shortGoal}</div>
-            <div class="session-meta">
-                <span class="session-id">#${s.id}</span>
-                <span>${date}</span>
-            </div>
-        `;
+        const main = document.createElement('div');
+        main.className = 'session-main';
+        main.textContent = shortGoal;
+
+        const meta = document.createElement('div');
+        meta.className = 'session-meta';
+
+        const idSpan = document.createElement('span');
+        idSpan.className = 'session-id';
+        idSpan.textContent = `#${s.id}`;
+
+        const dateSpan = document.createElement('span');
+        dateSpan.textContent = date;
+
+        meta.appendChild(idSpan);
+        meta.appendChild(dateSpan);
+        item.appendChild(main);
+        item.appendChild(meta);
 
         item.onclick = () => loadSession(s.id);
         listForDom.appendChild(item);

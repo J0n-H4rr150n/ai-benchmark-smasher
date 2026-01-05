@@ -142,6 +142,14 @@ Your normal conversational response to Antigravity, explaining your thought proc
             content=message,
             step_number=next_step
         )
+
+        try:
+            msg_preview = (message or "").replace("\n", " ").strip()
+            if len(msg_preview) > 200:
+                msg_preview = msg_preview[:200] + "…"
+            logger.info(f"[STEP START] session={session_id} step={next_step} msg='{msg_preview}'")
+        except Exception:
+            logger.info(f"[STEP START] session={session_id} step={next_step}")
         
         # Build conversation history
         history = await self._build_conversation_history(db, session_id)
@@ -175,6 +183,16 @@ Your normal conversational response to Antigravity, explaining your thought proc
         
         # Process response
         result = await self._process_response(response, db, session_id, step_number=next_step)
+
+        try:
+            tool_count = len(result.get("tool_calls") or [])
+            flags_count = len(result.get("flags") or [])
+            goal_complete = bool(result.get("content")) and ("GOAL-COMPLETE" in result.get("content", ""))
+            logger.info(
+                f"[STEP END] session={session_id} step={next_step} tools={tool_count} flags={flags_count} goal_complete={goal_complete}"
+            )
+        except Exception:
+            logger.info(f"[STEP END] session={session_id} step={next_step}")
         
         return result
 
@@ -467,14 +485,43 @@ Your normal conversational response to Antigravity, explaining your thought proc
         
         try:
             os.makedirs("logs", exist_ok=True)
-            log_file = "logs/runs.json"
-            
-            # Append mode - JSONL style for safety
-            with open(log_file, "a", encoding="utf-8") as f:
+
+            # 1) Append-only JSONL stream (quick + safe)
+            stream_log_file = "logs/runs.json"
+            with open(stream_log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(log_entry, default=str) + "\n")
+
+            # 2) Pretty per-session file for easy review in VS Code
+            if session_id is not None:
+                os.makedirs(os.path.join("logs", "runs"), exist_ok=True)
+                session_log_file = os.path.join("logs", "runs", f"{session_id}.json")
+                tmp_file = session_log_file + ".tmp"
+
+                session_doc = {
+                    "session_id": session_id,
+                    "entries": []
+                }
+
+                if os.path.exists(session_log_file):
+                    try:
+                        with open(session_log_file, "r", encoding="utf-8") as f:
+                            existing = json.load(f)
+                        if isinstance(existing, dict):
+                            session_doc["session_id"] = existing.get("session_id", session_id)
+                            if isinstance(existing.get("entries"), list):
+                                session_doc["entries"] = existing["entries"]
+                    except Exception:
+                        # If the file is corrupted/partial, fall back to a fresh document.
+                        session_doc = {"session_id": session_id, "entries": []}
+
+                session_doc["entries"].append(log_entry)
+
+                with open(tmp_file, "w", encoding="utf-8") as f:
+                    json.dump(session_doc, f, indent=4, ensure_ascii=False, default=str)
+                os.replace(tmp_file, session_log_file)
                 
         except Exception as e:
-            logger.error(f"[LOGGING ERROR] Failed to write to {log_file}: {e}")
+            logger.error(f"[LOGGING ERROR] Failed to write logs: {e}")
 
 # Global agent instance
 gemini_agent = GeminiAgent()

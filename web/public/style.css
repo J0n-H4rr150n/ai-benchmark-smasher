@@ -297,6 +297,39 @@ body {
     margin-top: 10px;
 }
 
+/* Collapsible step containers */
+.step-container {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.0);
+}
+
+.step-summary {
+    list-style: none;
+    cursor: pointer;
+    user-select: none;
+    padding: 10px 12px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    border-bottom: 1px solid var(--border);
+}
+
+/* Hide default marker (Chrome/Edge) */
+.step-summary::-webkit-details-marker {
+    display: none;
+}
+
+.step-container[open] > .step-summary {
+    background: var(--bg-panel);
+}
+
+.step-body {
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
 .tool-call {
     background: var(--bg-panel);
     border: 1px solid var(--border);
@@ -305,6 +338,37 @@ body {
     border-radius: 4px;
     color: var(--text-secondary);
     white-space: pre-wrap;
+}
+
+.thinking-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px;
+    border: 1px dashed var(--border);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    background: rgba(0, 0, 0, 0.0);
+}
+
+.thinking-spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 999px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+    flex: 0 0 auto;
+}
+
+.thinking-text {
+    font-size: 0.9rem;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .message {
@@ -324,6 +388,23 @@ body {
 
 .message.assistant {
     align-self: stretch;
+}
+
+.assistant-section strong {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--text-primary);
+}
+
+.assistant-pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    color: var(--text-primary);
 }
 
 .message.system {

@@ -2,15 +2,22 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.pool import NullPool
 import os
+import logging
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://ctf:ctf_password_change_in_prod@localhost:5432/ctf_smasher")
+
+SQLALCHEMY_ECHO = os.getenv("SQLALCHEMY_ECHO", "0").strip().lower() in {"1", "true", "yes", "y"}
 
 # Create async engine
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True,
+    echo=SQLALCHEMY_ECHO,
     poolclass=NullPool,  # For development; use proper pooling in production
 )
+
+# If echo is disabled, keep SQLAlchemy engine logs quiet.
+if not SQLALCHEMY_ECHO:
+    logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
 
 # Session factory
 AsyncSessionLocal = async_sessionmaker(
