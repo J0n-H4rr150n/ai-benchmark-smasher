@@ -308,10 +308,25 @@ body {
     list-style: none;
     cursor: pointer;
     user-select: none;
-    padding: 10px 12px;
+    position: relative;
+    padding: 10px 34px 10px 12px;
     color: var(--text-secondary);
     font-size: 0.9rem;
     border-bottom: 1px solid var(--border);
+}
+
+/* Custom expand/collapse indicator (top-right) */
+.step-container > .step-summary::after {
+    content: "▾";
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+}
+
+.step-container[open] > .step-summary::after {
+    content: "▴";
 }
 
 /* Hide default marker (Chrome/Edge) */

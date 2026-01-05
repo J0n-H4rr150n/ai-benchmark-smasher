@@ -110,9 +110,12 @@ async def send_chat_message(
                     summary_file_path=None
                 )
     except Exception as e:
-        # Never fail the chat response due to knowledge base persistence
+        # Default: never fail the chat response due to knowledge base persistence.
+        # Strict embedding mode: fail fast so embedding/provider issues are visible.
         import logging
         logging.getLogger(__name__).warning(f"[KNOWLEDGE] Failed to store successful run: {e}")
+        if getattr(settings, "embedding_strict", False):
+            raise
     
     elapsed = time.time() - start_time
     

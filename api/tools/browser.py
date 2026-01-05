@@ -111,7 +111,11 @@ class BrowserTool(BaseTool):
         """Ensure browser and context are initialized"""
         if not self.playwright:
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(headless=True)
+            self.browser = await self.playwright.chromium.launch(
+                headless=settings.playwright_headless,
+                slow_mo=max(int(settings.playwright_slow_mo_ms or 0), 0),
+                devtools=bool(settings.playwright_devtools),
+            )
             
             # Load persistent context
             context_state_file = self.state_dir / "browser_state.json"

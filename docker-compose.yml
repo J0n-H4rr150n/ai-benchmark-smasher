@@ -25,6 +25,16 @@ services:
       - DATABASE_URL=postgresql+asyncpg://ctf:ctf_password_change_in_prod@db:5432/ctf_smasher
       - GCP_PROJECT_ID=${GCP_PROJECT_ID}
       - GOOGLE_APPLICATION_CREDENTIALS=/app/vertex-executor-key.json
+      # Embeddings / Knowledge base
+      # - EMBEDDING_PROVIDER=kaggle_tfhub|vertexai|hash|auto
+      # - EMBEDDING_STRICT=1 to fail hard if provider can't initialize
+      - EMBEDDING_PROVIDER=kaggle_tfhub
+      - EMBEDDING_STRICT=1
+      - TFHUB_CACHE_DIR=/app/.tfhub
+      # Playwright (headed mode requires a display/VNC setup; see notes)
+      - PLAYWRIGHT_HEADLESS=${PLAYWRIGHT_HEADLESS:-1}
+      - PLAYWRIGHT_SLOW_MO_MS=${PLAYWRIGHT_SLOW_MO_MS:-0}
+      - PLAYWRIGHT_DEVTOOLS=${PLAYWRIGHT_DEVTOOLS:-0}
     volumes:
       - ./api:/app/api
       - ./vertex-executor-key.json:/app/vertex-executor-key.json:ro

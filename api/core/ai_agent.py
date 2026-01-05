@@ -5,6 +5,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
 import time
+from urllib.parse import urlparse
 
 from ..config import settings
 from ..tools.registry import tool_registry
@@ -153,6 +154,31 @@ Your normal conversational response to Antigravity, explaining your thought proc
         
         # Build conversation history
         history = await self._build_conversation_history(db, session_id)
+
+        # --- RAG / Memory injection (successful_runs pgvector) ---
+        # Improves autonomy by surfacing relevant tactics early and when stuck.
+        session = None
+        if session_id:
+            try:
+                session = await crud.get_session(db, session_id)
+            except Exception:
+                session = None
+
+        # Detect low confidence from last assistant turn (if available)
+        low_confidence_detected = False
+        try:
+            if session_id:
+                recent = await crud.get_conversation_history(db, session_id, limit=6)
+                last_assistant = next((m for m in reversed(recent) if m.role == models.MessageRole.ASSISTANT), None)
+                if last_assistant and last_assistant.llm_confidence_score is not None:
+                    score_str = str(last_assistant.llm_confidence_score).strip()
+                    # Extract a float-ish value
+                    import re
+                    m = re.search(r"(\d+(?:\.\d+)?)", score_str)
+                    if m and float(m.group(1)) < 0.5:
+                        low_confidence_detected = True
+        except Exception:
+            low_confidence_detected = False
         
         # Repetition Detection
         repetition_detected = await self._detect_repetition(db, session_id)
@@ -160,6 +186,92 @@ Your normal conversational response to Antigravity, explaining your thought proc
             warning = "System Note: Tool call repetition detected. Please explore a different path (e.g., check other files, headers, or try different inputs) to avoid getting stuck."
             logger.warning(f"[REPETITION] Injecting warning for session {session_id}")
             history.append(Content(role="user", parts=[Part.from_text(warning)]))
+
+        async def _inject_knowledge(reason: str, query: str):
+            if not session_id:
+                return
+            try:
+                from ..crud_knowledge import search_knowledge_base
+                results = await search_knowledge_base(db, query=query, limit=3)
+                if not results:
+                    return
+
+                lines = [
+                    f"System Note: Retrieved similar successful strategies from the knowledge base (reason: {reason}).",
+                    "Use these as HIGH-LEVEL tactics/patterns; adapt to the current target."
+                ]
+
+                for i, r in enumerate(results, start=1):
+                    methodology = (r.get("methodology") or "").strip()
+                    if len(methodology) > 800:
+                        methodology = methodology[:800] + "…"
+                    tools_used = r.get("tools_used")
+                    if isinstance(tools_used, list):
+                        tools_used_str = ", ".join(str(x) for x in tools_used[:10])
+                    else:
+                        tools_used_str = ""
+
+                    lines.append(
+                        f"\n[{i}] similarity={r.get('similarity'):.2f} vuln={r.get('vulnerability_type') or 'unknown'} tools=[{tools_used_str}]\n"
+                        f"Methodology: {methodology}\n"
+                        f"Breakthrough: {(r.get('breakthrough_insight') or '').strip()}"
+                    )
+
+                history.append(Content(role="user", parts=[Part.from_text("\n".join(lines))]))
+                logger.info(f"[RAG] Injected {len(results)} knowledge results for session {session_id} ({reason})")
+            except Exception as e:
+                logger.warning(f"[RAG] Knowledge injection failed for session {session_id}: {e}")
+
+        def _target_hint_for_rag(target_url: str) -> str:
+            """Return a stable, port-agnostic hint for RAG queries.
+
+            We intentionally avoid including full URLs (especially localhost ports)
+            so memories generalize across targets/environments.
+            """
+            try:
+                if not target_url:
+                    return ""
+                parsed = urlparse(target_url)
+                host = (parsed.hostname or "").strip().lower()
+                if not host:
+                    return ""
+                if host in {"localhost", "127.0.0.1", "::1"}:
+                    return ""
+                return host
+            except Exception:
+                return ""
+
+        # Inject on session start (step 1) to prime tactics.
+        if session_id and next_step == 1:
+            goal = (session.goal if session and session.goal else "").strip()
+            target_hint = _target_hint_for_rag((session.target_url if session and session.target_url else "").strip())
+            base_query = " ".join(x for x in [goal, target_hint] if x)
+            if not base_query:
+                base_query = "CTF web challenge find FLAG vulnerabilities"
+            await _inject_knowledge("session_start", base_query)
+
+        # Inject when stuck.
+        if session_id and (repetition_detected or low_confidence_detected):
+            # Build a query from the last assistant's findings/decision if possible.
+            query_parts = []
+            if session and session.goal:
+                query_parts.append(session.goal)
+            target_hint = _target_hint_for_rag((session.target_url if session and session.target_url else "").strip())
+            if target_hint:
+                query_parts.append(target_hint)
+            try:
+                recent = await crud.get_conversation_history(db, session_id, limit=12)
+                last_assistant = next((m for m in reversed(recent) if m.role == models.MessageRole.ASSISTANT), None)
+                if last_assistant:
+                    if last_assistant.llm_findings:
+                        query_parts.append(str(last_assistant.llm_findings))
+                    if last_assistant.llm_decision:
+                        query_parts.append(str(last_assistant.llm_decision))
+            except Exception:
+                pass
+
+            reason = "repetition" if repetition_detected else "low_confidence"
+            await _inject_knowledge(reason, "\n".join(q.strip() for q in query_parts if q and q.strip()))
         
         # Create chat session with tools
         tools = self._build_tools()

@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  api:
+    ports:
+      - "5900:5900"
+      - "6080:6080"
+    environment:
+      # Enable headed Playwright + noVNC stack
+      - PLAYWRIGHT_HEADLESS=0
+      - ENABLE_NOVNC=1
