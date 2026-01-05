@@ -27,7 +27,7 @@ startBtn.addEventListener('click', async () => {
         startBtn.disabled = true;
         pauseBtn.disabled = false;
         stopBtn.disabled = false;
-        setInputState(false);
+        setInputState(true);
         runMissionLoop();
         return;
     }
@@ -54,10 +54,13 @@ startBtn.addEventListener('click', async () => {
         startBtn.disabled = true;
         pauseBtn.disabled = false;
         stopBtn.disabled = false;
-        setInputState(false);
+        setInputState(true);
 
         chatContainer.innerHTML = ''; // Clear chat
         addMessage('system', `Mission Started. Session ID: ${SESSION_ID}`);
+
+        // Ensure the Run History reflects the current session
+        loadSessionHistory();
 
         runMissionLoop();
 
@@ -186,7 +189,7 @@ function renderAssistantResponse(data) {
 
     // 2. Logic to Find and Display Screenshots INLINE
     if (data.tool_results) {
-        console.log("[DEBUG] Tool Results:", data.tool_results); // Debugging line
+        // console.log("[DEBUG] Tool Results:", data.tool_results); 
         data.tool_results.forEach(res => {
             try {
                 // Backend returns flat object, but handle legacy nested structure just in case
@@ -205,7 +208,7 @@ function renderAssistantResponse(data) {
                 }
 
                 if (screenshotPath) {
-                    addInlineScreenshot(screenshotPath);
+                    addInlineScreenshot(screenshotPath, !!data.skipScroll);
                 }
             } catch (e) { console.error("Error parsing tool result", e); }
         });
@@ -239,7 +242,9 @@ function renderAssistantResponse(data) {
     }
 
     // Scroll to bottom
-    chatContainer.scrollTop = chatContainer.scrollHeight;
+    if (!data.skipScroll) {
+        scrollToBottom();
+    }
 
     // Update Confidence
     if (data.llm_confidence_score) {
@@ -248,7 +253,7 @@ function renderAssistantResponse(data) {
 }
 
 
-function addInlineScreenshot(fullPath) {
+function addInlineScreenshot(fullPath, skipScroll = false) {
     const filename = fullPath.split(/[\/\\]/).pop();
     const url = `${getApiUrl()}/screenshots/${filename}`;
 
@@ -258,14 +263,23 @@ function addInlineScreenshot(fullPath) {
     img.onclick = () => window.open(url, '_blank');
     img.title = "Click to view full size";
 
+    // Auto-scroll when image loads
+    img.onload = () => {
+        if (!skipScroll) scrollToBottom();
+    };
+
     chatContainer.appendChild(img);
 }
 
-function addMessage(role, text) {
+function addMessage(role, text, skipScroll = false) {
     const div = document.createElement('div');
     div.className = `message ${role}`;
     div.innerText = text;
     chatContainer.appendChild(div);
+    if (!skipScroll) scrollToBottom();
+}
+
+function scrollToBottom() {
     chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
@@ -364,7 +378,7 @@ async function loadSession(id) {
 
         history.forEach(msg => {
             if (msg.role === 'user') {
-                addMessage('user', msg.content);
+                addMessage('user', msg.content, true); // true = skipScroll
             } else {
                 renderAssistantResponse({
                     content: msg.content,
@@ -374,10 +388,15 @@ async function loadSession(id) {
                     llm_critique: msg.llm_critique,
                     llm_next_steps: msg.llm_next_steps,
                     llm_confidence_score: msg.llm_confidence_score,
-                    timestamp: msg.created_at
+                    timestamp: msg.created_at,
+                    skipScroll: true // Pass skipScroll
                 });
             }
         });
+
+        // Scroll once at the end
+        // Short timeout to allow CSS layout to settle for a moment
+        setTimeout(scrollToBottom, 50);
 
         // Refresh list to show active state
         loadSessionHistory();
